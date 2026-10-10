@@ -1,0 +1,42 @@
+# 复制为 config.toml 后按需填写。全部可留空 —— 留空时只有需要该凭据的能力不可用，
+# 其余照常工作，并给出明确的「缺什么、去哪申请」提示。
+
+[youtube]
+# YouTube Data API v3（免费额度足够做热点榜）
+# 申请：Google Cloud Console → 启用 YouTube Data API v3 → 创建 API key
+api_key = ""
+
+[kick]
+# Kick 官方 Public API 需要 app token
+# 申请：https://dev.kick.com 建 app → 填 client_id / client_secret（脚本换 token 前先手动换一次也可）
+client_id = ""
+client_secret = ""
+access_token = ""
+
+[tiktok]
+# 无需凭据：走 playwright 浏览器渲染公开趋势页。
+# 需要可选组件：node + playwright（npm i playwright && npx playwright install chromium）
+# 若 playwright 装在别处，用环境变量 INTEL_NODE_PATH 指向它的 node_modules。
+
+[instagram]
+# 无官方趋势接口：需自带 sessionid cookie，并配几个对标账号做「近期帖互动」代理指标
+# 取 cookie：浏览器登录 IG → 开发者工具 → Application → Cookies → 复制 sessionid
+session_id = ""
+seed_accounts = []
+
+[output]
+dir = "out"
+
+[gate]
+# 按域名的抓取纪律（写进代码，不建议调大）
+min_interval_seconds = 15      # 同一域名两次请求的最小间隔
+daily_cap_per_domain = 200     # 每域名每日上限
+cooldown_seconds = 21600       # 命中风控后的冷却时长（6h），冷却期内零请求
+
+[collab]
+# cross=总是交叉复核 / single=单模型 / auto=检测到两端就交叉
+mode = "auto"
+# 缺 codex 时的等价替代（任意 OpenAI 兼容端；不填则只用本机 CLI）
+openai_base_url = ""
+openai_api_key = ""
+openai_model = ""

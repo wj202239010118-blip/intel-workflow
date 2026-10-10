@@ -1,0 +1,8 @@
+# 核心零第三方依赖（仅标准库）。
+# Python < 3.11 时需补一个 TOML 解析器：
+tomli; python_version < "3.11"
+
+# 可选组件（不装也能跑 Twitch / X / YouTube 热点）
+# curl_cffi      # 有 TLS 指纹要求的站点
+# playwright     # TikTok 趋势（需浏览器渲染读 DOM）
+# yt-dlp         # YouTube 无 API key 时的降级取数

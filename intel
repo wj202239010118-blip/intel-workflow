@@ -1,0 +1,11 @@
+#!/usr/bin/env python3
+"""intel —— 统一入口（薄壳，真正逻辑在 intel_workflow/）。"""
+import pathlib
+import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+
+from intel_workflow.cli import main  # noqa: E402
+
+if __name__ == "__main__":
+    raise SystemExit(main())

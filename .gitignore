@@ -1,0 +1,11 @@
+# 凭据与本地状态（永不入仓）
+config.toml
+config.toml.bak*
+.secrets/
+*.cookie
+*.session
+out/
+.state/
+__pycache__/
+*.pyc
+.venv/
