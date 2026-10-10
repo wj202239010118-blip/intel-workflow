@@ -61,6 +61,16 @@ bash install.sh --uninstall   # 卸载已装载的 skill
 - 命中风控立即熔断，**不自动重试**（反复请求只会延长封禁）
 - 禁并发、禁批量翻页
 
+## 测试
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
+**全部离线**（不发任何网络请求）。覆盖：闸门熔断 / 冷却持久化 / 域名隔离、`404` 不误熔断（回归用例）、
+TOML 零依赖解析器与 stdlib 结果一致、X 的 region 归一化、TikTok 的 region 白名单、`digest` 的新进/掉榜/排位对比。
+CI 在 push 与 PR 时跑（Python 3.9 与 3.12 双版本 + gitleaks 密钥扫描）。
+
 ## 文档
 
 - `AGENTS.md` — 给 AI 的集成与使用说明（含纪律）

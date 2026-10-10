@@ -25,12 +25,18 @@ REGION_SLUGS = {
 REGION_HINT = "地区可用国家码（US / ID / MX / NG…）或 slug（united-states）"
 
 
+def slug_for(region):
+    """国家码（US / ID / MX…）或 slug（united-states）→ 趋势页 slug。"""
+    raw = (region or "").strip() or "US"
+    return REGION_SLUGS.get(raw.upper(), raw.lower().replace(" ", "-"))
+
+
 class X(Adapter):
     platform = "x"
 
     def hot(self, region="US", period="24h"):
-        raw = (region or "US").strip()
-        slug = REGION_SLUGS.get(raw.upper(), raw.lower().replace(" ", "-"))
+        raw = (region or "").strip() or "US"
+        slug = slug_for(raw)
         url = f"https://trends24.in/{slug}/"
         try:
             _, text = self.http.get(url, domain="trends24.in")

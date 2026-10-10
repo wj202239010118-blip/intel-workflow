@@ -20,6 +20,14 @@ INSTALL_HINT = "npm i playwright && npx playwright install chromium（或把已�
 REGION_RE = re.compile(r"[A-Za-z0-9_-]{2,8}")
 
 
+def validate_region(region):
+    """region 白名单校验（防参数拼进子进程参数时被注入）。"""
+    value = (region or "").strip().upper() or "US"
+    if not REGION_RE.fullmatch(value):
+        raise Degraded(f"TikTok：region 只允许 2–8 位字母/数字/_/-（收到 {region!r}）")
+    return value
+
+
 class TikTok(Adapter):
     platform = "tiktok"
 
@@ -41,9 +49,7 @@ class TikTok(Adapter):
         return os.pathsep.join([c for c in candidates if c])
 
     def hot(self, region="US", period="24h"):
-        region = (region or "US").upper()
-        if not REGION_RE.fullmatch(region):
-            raise Degraded(f"TikTok：region 只允许 2–8 位字母/数字/_/-（收到 {region!r}）")
+        region = validate_region(region)
         if not shutil.which("node"):
             raise Degraded(f"TikTok 需要 node + playwright → {INSTALL_HINT}")
 
