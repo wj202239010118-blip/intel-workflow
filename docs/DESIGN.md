@@ -170,7 +170,7 @@ git clone <repo> && cd <repo> && ./install.sh     # macOS/Linux
 
 | 依赖 | 必需 | 说明 |
 |---|---|---|
-| python3 ≥ 3.10 | ✔ | 全部 adapter |
+| python3 ≥ 3.9 | ✔ | 全部 adapter（macOS 自带的 3.9 即可，无 tomllib 时用内置解析器） |
 | git | ✔ | 安装/更新 |
 | node ≥ 18 | 可选 | 部分浏览器腿 |
 | yt-dlp | 可选 | YouTube 无 key 降级 |
