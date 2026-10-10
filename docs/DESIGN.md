@@ -82,10 +82,11 @@ agent (Claude Code / Codex)
 ### 3.1 统一入口
 
 ```
-intel hot    --platform <x|yt|tt|ig|twitch|kick|all> [--region US] [--period 24h]
-intel search --platform <x|tt|yt|ig> --q "<keyword>" [--region US]
-intel verify --platform <x|tt|yt|ig> --handle @foo | --url <u>
-intel digest --since 24h [--region US]        # 汇总成一份日报
+intel hot    --platform <all|youtube|x|twitch|kick|tiktok|instagram> [--region US]
+intel search --platform youtube --q "<keyword>"          # 目前仅 YouTube
+intel verify --platform instagram --handle <@handle>     # 目前仅 Instagram（需自带 cookie）
+intel analyze --platform all --region US                 # 取事实 + 双模型交叉复核
+intel digest                                             # 对比 out/ 里的历史抓取
 ```
 
 ### 3.2 归一化情报对象（所有 adapter 必须产出这个形状）
@@ -154,7 +155,7 @@ intel digest --since 24h [--region US]        # 汇总成一份日报
 
 ```
 git clone <repo> && cd <repo> && ./install.sh     # macOS/Linux
-（Windows: install.ps1）
+（当前仅 macOS；Linux 理论可用但未验证）
 ```
 
 `install.sh` 依次做：
@@ -182,7 +183,7 @@ git clone <repo> && cd <repo> && ./install.sh     # macOS/Linux
 ```
 intel-workflow/
 ├─ README.md              # 装载教程（非技术同事向，含常见报错）
-├─ install.sh / install.ps1
+├─ install.sh
 ├─ config.example.toml
 ├─ core/                  # 闸门、归一化、输出、记忆
 ├─ adapters/              # x.py youtube.py tiktok.py instagram.py twitch.py kick.py

@@ -29,7 +29,6 @@ def build_parser():
         sp = sub.add_parser(cmd, help=help_text)
         sp.add_argument("--platform", default="all", help=f"all 或逗号分隔：{','.join(PLATFORMS)}")
         sp.add_argument("--region", default=None, help="地区（YouTube 用 US；X 用 united-states 这类 slug）")
-        sp.add_argument("--period", default="24h")
         sp.add_argument("--q", default=None, help="search 的关键词")
         sp.add_argument("--handle", default=None, help="verify 的账号")
         sp.add_argument("--out", default=None)
@@ -50,7 +49,7 @@ def _call(adapter, args):
         return adapter.search(args.q, region=args.region)
     if args.cmd == "verify":
         return adapter.verify(args.handle)
-    return adapter.hot(region=args.region, period=args.period)  # hot / analyze
+    return adapter.hot(region=args.region)  # hot / analyze
 
 
 def collect(args, cfg, http):
