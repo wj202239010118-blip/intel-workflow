@@ -38,8 +38,8 @@ bash install.sh --uninstall   # 卸载已装载的 skill
 |---|---|
 | `./intel hot --platform all --region US` | 各平台热点 / 热榜 |
 | `./intel hot --platform x --region indonesia` | 指定地区的 X 趋势 |
-| `./intel search --platform youtube --q "<kw>"` | 关键词下钻 |
-| `./intel verify --platform x --handle <@handle>` | 账号核实 |
+| `./intel search --platform youtube --q "<kw>"` | 关键词下钻（YouTube） |
+| `./intel verify --platform instagram --handle <@handle>` | 账号核实（Instagram，需自带 cookie） |
 | `./intel analyze --platform all --region US` | 取事实 + 双模型交叉复核（结论 / 存疑 / 一致 / 分歧） |
 
 ## 凭据（全部可选，由使用者自带；仓库不含任何凭据）

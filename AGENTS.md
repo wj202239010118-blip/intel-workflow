@@ -32,8 +32,8 @@
 ```bash
 ./intel hot    --platform all --region US              # 各平台热点/热榜
 ./intel hot    --platform x --region indonesia         # 指定地区趋势
-./intel search --platform youtube --q "<keyword>"      # 关键词下钻
-./intel verify --platform x --handle <@handle>         # 账号核实
+./intel search --platform youtube --q "<keyword>"      # 关键词下钻（目前仅 YouTube）
+./intel verify --platform instagram --handle <@handle> # 账号核实（目前仅 Instagram，需自带 cookie）
 ./intel analyze --platform all --region US             # 取事实 + 双模型交叉复核
 ```
 

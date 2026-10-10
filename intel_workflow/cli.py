@@ -1,6 +1,7 @@
 """命令行入口：hot / search / verify / analyze（analyze = 取事实 + 双模型交叉复核）。"""
 import argparse
 import datetime as dt
+import json
 import pathlib
 import sys
 
@@ -14,9 +15,10 @@ from .core.http import Http
 PLATFORMS = ["youtube", "x", "twitch", "kick", "tiktok", "instagram"]
 _COMMANDS = [
     ("hot", "平台热点 / 热榜"),
-    ("search", "关键词下钻"),
-    ("verify", "账号核实"),
+    ("search", "关键词下钻（目前仅 YouTube）"),
+    ("verify", "账号核实（目前仅 Instagram）"),
     ("analyze", "取事实 + 双模型交叉复核"),
+    ("digest", "对比历史抓取的变化（新进榜 / 掉榜 / 排位变化）"),
 ]
 
 
@@ -78,6 +80,61 @@ def collect(args, cfg, http):
     return facts, rc
 
 
+def _digest(args, cfg):
+    """对比同一平台/地区最近两次抓取：新进榜 / 掉榜 / 排位变化。不需要联网。"""
+    outdir = pathlib.Path(args.out or cfg.output_dir)
+    groups = {}
+    if outdir.exists():
+        for path in sorted(outdir.glob("*.jsonl")):
+            for line in path.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except Exception:
+                    continue
+                key = (rec.get("platform", "?"), rec.get("kind", "?"), rec.get("region"))
+                groups.setdefault(key, []).append(rec)
+    if not groups:
+        print("⚠️  还没有历史记录：先跑几次 hot（结果会落进 out/），再运行 digest 才有对比")
+        return 1
+
+    lines, compared = ["# 情报 · 变化对比", ""], 0
+    for (platform, kind, region), recs in sorted(groups.items()):
+        recs.sort(key=lambda r: r.get("fetched_at", ""))
+        if len(recs) < 2:
+            continue
+        prev, cur = recs[-2], recs[-1]
+        prev_titles = [i.get("title") for i in prev.get("items", [])]
+        cur_titles = [i.get("title") for i in cur.get("items", [])]
+        added = [t for t in cur_titles if t not in prev_titles]
+        dropped = [t for t in prev_titles if t not in cur_titles]
+        moved = []
+        for idx, title in enumerate(cur_titles):
+            if title in prev_titles and prev_titles.index(title) + 1 != idx + 1:
+                moved.append(f"{title}（{prev_titles.index(title) + 1} → {idx + 1}）")
+        label = f"{platform} · {kind}" + (f" · {region}" if region else "")
+        lines += [
+            f"## {label}", "",
+            f"- 对比：{prev.get('fetched_at', '?')} → {cur.get('fetched_at', '?')}",
+            f"- 新进榜（{len(added)}）：" + ("、".join(added[:10]) or "—"),
+            f"- 掉榜（{len(dropped)}）：" + ("、".join(dropped[:10]) or "—"),
+            f"- 排位变化（{len(moved)}）：" + ("；".join(moved[:10]) or "—"), "",
+        ]
+        compared += 1
+
+    if not compared:
+        lines.append("（每个平台都还不够两次记录，先多跑几次 hot）")
+    text = "\n".join(lines) + "\n"
+    print(text)
+    if not args.no_save and outdir.exists():
+        path = outdir / f"{dt.date.today().isoformat()}-digest.md"
+        path.write_text(text, encoding="utf-8")
+        print(f"💾 {path}")
+    return 0
+
+
 def _run_analyze(args, cfg, http):
     facts, rc = collect(args, cfg, http)
     if not facts:
@@ -102,6 +159,8 @@ def _run_analyze(args, cfg, http):
 
 def run(args):
     cfg = Config(args.config)
+    if args.cmd == "digest":
+        return _digest(args, cfg)
     http = Http(gate=Gate(**cfg.gate_options))
     if args.cmd == "analyze":
         return _run_analyze(args, cfg, http)

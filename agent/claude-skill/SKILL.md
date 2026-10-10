@@ -12,8 +12,8 @@ description: 查社交平台站内的一手情报与热点（X/YouTube/Twitch/Ki
 ```bash
 {{INTEL_DIR}}/intel hot    --platform all --region US         # 各平台热点/热榜
 {{INTEL_DIR}}/intel hot    --platform x --region indonesia    # 指定地区趋势
-{{INTEL_DIR}}/intel search --platform youtube --q "<keyword>" # 关键词下钻
-{{INTEL_DIR}}/intel verify --platform x --handle <@handle>     # 账号核实
+{{INTEL_DIR}}/intel search --platform youtube --q "<keyword>" # 关键词下钻（目前仅 YouTube）
+{{INTEL_DIR}}/intel verify --platform instagram --handle <@h>  # 账号核实（目前仅 IG，需自带 cookie）
 {{INTEL_DIR}}/intel analyze --platform all --region US         # 取事实 + 双模型交叉复核
 ```
 

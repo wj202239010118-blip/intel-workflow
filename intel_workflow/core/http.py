@@ -13,7 +13,9 @@ UA = (
     "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 )
 
-RISK_MARKERS = ("cloudflare", "rate limit", "too many requests", "just a moment", "错误 1015")
+# 只有这些特征才算「命中风控」——别把普通 404/500 也算进来（会误伤 6 小时冷却）
+RISK_MARKERS = ("just a moment", "attention required", "error 1015", "rate limited",
+                "too many requests", "cf-error-details", "checking your browser")
 
 
 class HttpError(Exception):
@@ -58,7 +60,8 @@ class Http:
                     pass
             text = raw.decode("utf-8", "replace")
             low = text.lower()
-            if exc.code in (429, 503) or any(m in low for m in RISK_MARKERS):
+            challenge = any(m in low for m in RISK_MARKERS)
+            if exc.code in (429, 503) or (exc.code == 403 and challenge):
                 self.gate.trip(domain)
                 raise RateLimited(
                     f"{domain}: 命中风控 HTTP {exc.code} → 已熔断，冷却 {self.gate.cooldown}s，不自动重试"
