@@ -20,6 +20,15 @@
 仓库根有 `AGENTS.md`（给 AI 的集成与使用说明）和 `CLAUDE.md`（指向 AGENTS.md）；
 `agent/` 下是装载件（Claude Code skill、Codex 的 AGENTS 片段）。AI 读完就能自己装。
 
+**装载其实是「两步 + 一次验证」**（详见 [`docs/INSTALL.md`](docs/INSTALL.md) 第三节）：
+
+1. **装工具** —— 让 agent 有「取数的手」：`bash install.sh` 会自动把 skill 装进 `~/.claude/skills/`
+2. **装规矩** —— 把它该遵守的行为规范**落成文件**（`~/.claude/skills/<name>/SKILL.md`，或写进项目 `CLAUDE.md` / `AGENTS.md`）。
+   只"发到对话里读一次"不算 —— 换个会话就忘了
+3. **验证** —— 问它「查今天 X 的热点」：返回**带来源和抓取时间**的真实榜才算成
+
+> 装工具的 AI 会让你批准执行命令，点允许即可；若它回 `blocked on permission`，回一句「允许执行」。
+
 ## 手动安装
 
 ```bash
