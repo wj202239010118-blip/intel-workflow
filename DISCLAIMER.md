@@ -29,6 +29,24 @@ By using, cloning, forking, or redistributing it, you agree that:
    higher legal risk than the rest of this project — evaluate before use.
 8. **Third-party aggregator pages** (used as fallbacks) may have their own terms of use.
 
+## Acceptable Use / 用途约束
+
+**Permitted** — personal research; trend discovery; one-off lookups of publicly visible data by a
+human operator or their agent; deliberately low request rates.
+
+**Not permitted**:
+
+- bulk or automated collection at scale;
+- building profiles, databases, or dossiers on individuals;
+- tracking sensitive groups; re-identifying or correlating accounts;
+- removing, disabling, or bypassing the rate limiter;
+- any use that harasses, surveils, or infringes the rights of others.
+
+**允许**：个人研究、热点发现、由人或其 agent 对公开可见数据做单次查询、保持很低的请求频率。
+
+**禁止**：规模化批量采集；对个人建库 / 画像 / 侧写；追踪敏感群体；重识别或关联账号；
+移除、关闭或绕过限速器；任何骚扰、监控或侵权用途。
+
 ## 中文摘要
 
 本项目**仅供合法的个人与学习用途**。

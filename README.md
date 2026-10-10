@@ -3,6 +3,10 @@
 > ⚠️ **Disclaimer** — for lawful personal / educational use only. You are responsible for
 > complying with each platform's Terms of Service; the built-in rate limiter is part of the
 > design (don't remove it); no credentials are shipped. See [DISCLAIMER.md](DISCLAIMER.md).
+>
+> **Acceptable use / 用途约束** — **允许**：个人研究、热点发现、由人或其 agent 对**公开可见**数据做单次查询，
+> 且保持很低的请求频率。**禁止**：规模化批量采集；对个人建库 / 画像 / 侧写；追踪敏感群体；
+> 重识别或关联账号；移除、关闭或绕过限速器；任何骚扰、监控或侵权用途。
 
 给 agent（Claude Code / Codex）装上「社交平台站内一手情报 + 热点监控」能力：
 直接向平台要数据，而不是依赖搜索引擎/模型训练数据里的二手信息。
