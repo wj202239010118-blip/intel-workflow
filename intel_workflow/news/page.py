@@ -104,7 +104,7 @@ def render(pages, date=None, top_n=TOP_N, site_name="iGaming Daily"):
         return html_mod.escape(text)
 
     blocks = []
-    for row in items:
+    for idx, row in enumerate(items, 1):
         title = esc(row["title"])
         if row["url"]:
             head = f'<a href="{esc(row["url"])}" target="_blank" rel="noopener nofollow">{title}</a>'
@@ -114,9 +114,10 @@ def render(pages, date=None, top_n=TOP_N, site_name="iGaming Daily"):
         if row["time"]:
             meta_bits.append(esc(row["time"]))
         summary = f'<p class="sum">{esc(row["summary"])}</p>' if row["summary"] else ""
+        # id = 序号：推送里可以直接 `#3` 定位到第 3 条
         blocks.append(
-            '<article><h2>%s</h2><p class="meta">%s</p>%s</article>'
-            % (head, " · ".join(meta_bits), summary)
+            '<article id="%d"><h2>%s</h2><p class="meta">%s</p>%s</article>'
+            % (idx, head, " · ".join(meta_bits), summary)
         )
 
     body = "\n".join(blocks) or "<p>No headlines for this date.</p>"
