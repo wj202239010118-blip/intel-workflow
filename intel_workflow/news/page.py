@@ -4,6 +4,9 @@
 本机或内网后面（不开机就不通）。所以把每日简报渲染成静态 HTML、写进边缘 KV，
 由边缘直接返回 —— 不依赖任何自有服务在线。
 
+同时提供 `as_json()`：同一批条目的机读版，供界面侧（看板 / 面板）fetch 使用
+（HTML 给人看，JSON 给界面用，两边数据同源）。
+
 三条纪律写在这里：
   · **正文一律英文** —— 这一页可能被公开访问，只允许 EN / ES。
   · **无敏感语境** —— 只有公开新闻的标题 / 摘要 / 链接。
@@ -43,6 +46,17 @@ footer .wrap{border-top:1px solid var(--line);padding-top:14px}
 """
 
 
+def _plain(value):
+    """多轮解实体：有些源双重编码（`&amp;#39;`），只解一次会把字面量留给读者。"""
+    text = str(value or "")
+    for _ in range(3):
+        unescaped = html_mod.unescape(text)
+        if unescaped == text:
+            break
+        text = unescaped
+    return text
+
+
 def load_latest(outdir, date=None):
     """读 out/<date>-*news.jsonl（每站取最新一轮）→ [{platform, method, items}]。"""
     date = date or dt.date.today().isoformat()
@@ -69,11 +83,11 @@ def _all_items(pages):
         for pos, item in enumerate(page.get("items", [])):
             metrics = item.get("metrics") or {}
             row = {
-                "title": item.get("title") or "",
+                "title": _plain(item.get("title")),
                 "url": item.get("url") or "",
                 "time": metrics.get("time") or "",
                 "ts": metrics.get("ts") or "",
-                "summary": metrics.get("summary") or "",
+                "summary": _plain(metrics.get("summary")),
                 "site": metrics.get("site") or page.get("platform") or "",
                 "site_key": page.get("platform") or "",
                 "pos": pos,
@@ -83,25 +97,28 @@ def _all_items(pages):
     return dated + undated
 
 
+def as_json(pages, date=None, top_n=TOP_N):
+    """同一批条目的机读版（界面侧 fetch 用，与页面数据同源）。"""
+    date = date or dt.date.today().isoformat()
+    return {
+        "date": date,
+        "items": [
+            {"rank": idx, "title": row["title"], "url": row["url"],
+             "summary": row["summary"], "site": row["site"], "time": row["time"]}
+            for idx, row in enumerate(_all_items(pages)[:top_n], 1)
+        ],
+    }
+
+
 def render(pages, date=None, top_n=TOP_N, site_name="iGaming Daily"):
-    """渲染成一份独立 HTML 页（英文）：标题指向原文、摘要为纯文本；
-    `<!--CONSOLE_ENTRY-->` 占位留给托管方按需注入（默认留空）。"""
+    """生成页面 HTML（英文）。`<!--CONSOLE_ENTRY-->` 留给托管方按需注入。"""
     date = date or dt.date.today().isoformat()
     try:
         pretty = dt.date.fromisoformat(date).strftime("%d %b %Y")
     except Exception:
         pretty = date
     items = _all_items(pages)[:top_n]
-
-    def esc(value):
-        """先解掉残留实体再转义 —— 页面读的是已落盘的 jsonl，里面可能留着双重编码。"""
-        text = value or ""
-        for _ in range(3):
-            unescaped = html_mod.unescape(text)
-            if unescaped == text:
-                break
-            text = unescaped
-        return html_mod.escape(text)
+    esc = lambda value: html_mod.escape(_plain(value))          # noqa: E731
 
     blocks = []
     for idx, row in enumerate(items, 1):

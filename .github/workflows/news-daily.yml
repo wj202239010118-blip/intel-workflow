@@ -48,6 +48,7 @@ jobs:
         run: |
           python3 tools/kv_put.py out/daily.html daily:index
           python3 tools/kv_put.py out/daily.html "daily:$(date -u +%F)"
+          python3 tools/kv_put.py out/daily.json daily:json --content-type "application/json; charset=utf-8"
 
       - name: 推送到 Lark（前 10 条；没配 webhook 时只打印，绝不误发）
         env:

@@ -11,6 +11,7 @@
 """
 import argparse
 import datetime as dt
+import json
 import pathlib
 import sys
 
@@ -38,8 +39,14 @@ def main():
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(doc, encoding="utf-8")
 
+    # 同一批条目的 JSON：界面侧也要显示资讯，直接 fetch 这份
+    data = news_page.as_json(pages, date, top_n=args.top)
+    json_path = path.parent / "daily.json"
+    json_path.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+
     total = sum(len(p.get("items", [])) for p in pages)
     print(f"💾 {path}")
+    print(f"💾 {json_path}（{len(data['items'])} 条，供界面 fetch）")
     print(f"   {len(pages)} 站 / {total} 条 → 页面上取前 {args.top} 条（英文，零业务语境）")
     return 0
 
