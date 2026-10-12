@@ -9,6 +9,9 @@
      复用 cookie / consent 选择 / 登录态。浏览器子进程本身绕过 core.http，所以调用前后
      显式 gate.check / gate.record（每个域名每天一次导航）。
 
+条目的 metrics 里除 `time`（给人看）与 `site` 外，还带 `ts`（可比较的 ISO 时间戳，跨站排序用）
+与 `summary`（摘要，推送卡片用）—— 后者只有 feed 通道拿得到，sitemap 本身不带摘要。
+
 另外提供 profile_lock()：定时任务与手动跑同时用同一个 profile 会让两边都起不来
 （Chromium 的 ProcessSingleton），所以整轮抓取先拿这把文件锁。
 """
@@ -55,6 +58,22 @@ def channel_of(site):
     return "browser"
 
 
+def _items_from(parsed, site):
+    """解析结果 → Item 列表（统一带上 time / site / ts / summary）。"""
+    return [
+        Item(
+            rank=it["rank"], title=it["title"], url=it["url"],
+            metrics={
+                "time": it.get("time", ""),
+                "site": site.domain,
+                "ts": it.get("ts", ""),
+                "summary": it.get("summary", ""),
+            },
+        )
+        for it in parsed
+    ]
+
+
 # --- 通道 1：feed（无浏览器） ---
 
 def fetch_feed(site, http, limit=None):
@@ -66,11 +85,7 @@ def fetch_feed(site, http, limit=None):
     except Exception as exc:  # noqa: BLE001 — 网络/HTTP 错误都算「这个站这轮拿不到」
         raise Degraded(f"{site.key}：feed 取不到 → {type(exc).__name__}: {exc}")
 
-    items = [
-        Item(rank=it["rank"], title=it["title"], url=it["url"],
-             metrics={"time": it.get("time", ""), "site": site.domain})
-        for it in feed_parser.parse(text, limit=limit or site.limit)
-    ]
+    items = _items_from(feed_parser.parse(text, limit=limit or site.limit), site)
     if not items:
         raise Degraded(f"{site.key}：feed 有响应但解析不出条目（地址还是 RSS 吗？）")
     return Intel(
@@ -112,11 +127,7 @@ def fetch_sitemap(site, http, limit=None):
             except Exception as exc:  # noqa: BLE001
                 raise Degraded(f"{site.key}：子 sitemap 取不到（{url}）→ {type(exc).__name__}: {exc}")
 
-    items = [
-        Item(rank=it["rank"], title=it["title"], url=it["url"],
-             metrics={"time": it.get("time", ""), "site": site.domain})
-        for it in sitemap_parser.parse(text, limit=limit or site.limit)
-    ]
+    items = _items_from(sitemap_parser.parse(text, limit=limit or site.limit), site)
     if not items:
         raise Degraded(
             f"{site.key}：sitemap 有响应但解析不出条目"
@@ -171,7 +182,8 @@ def fetch_site(site, http, profile=None, headless=False, wait=2500, timeout=45):
             rank=it.get("rank", i + 1),
             title=it.get("title", ""),
             url=it.get("url", ""),
-            metrics={"time": it.get("time", ""), "site": site.domain},
+            metrics={"time": it.get("time", ""), "site": site.domain,
+                     "ts": it.get("ts", ""), "summary": it.get("summary", "")},
         )
         for i, it in enumerate(payload.get("items", []))
     ]

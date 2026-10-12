@@ -37,6 +37,18 @@ jobs:
       - name: 抓取 + 整合英文日报（纯 HTTP，无浏览器）
         run: python3 intel news run --out out
 
+      - name: 生成每日热点页（静态 HTML，可托到边缘）
+        run: python3 tools/daily_page.py --top 10 --out out/daily.html
+
+      - name: 推到边缘 KV（凭据齐全才发；缺凭据自动 dry-run）
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_KV_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_KV_NAMESPACE: ${{ secrets.CF_KV_NAMESPACE }}
+        run: |
+          python3 tools/kv_put.py out/daily.html daily:index
+          python3 tools/kv_put.py out/daily.html "daily:$(date -u +%F)"
+
       - name: 归档日报（artifact，保留 90 天）
         uses: actions/upload-artifact@v4
         with:
@@ -44,6 +56,7 @@ jobs:
           path: |
             out/*-news-digest.md
             out/*-news.jsonl
+            out/*-daily.html
           retention-days: 90
           if-no-files-found: error
 
