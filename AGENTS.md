@@ -72,6 +72,12 @@
 **于是内置四站都不需要 node + playwright** —— 只有自己新加的、既没 feed 也没 sitemap 的站点才需要。
 整轮抓取持 profile 文件锁（并发时后到的那轮跳过，不两边一起挂）；某站条目数骤降会在日报顶部点名。
 
+**云腿（可选）**：`.github/workflows/news-daily.yml` 让这份日报在 **GitHub Actions** 上每天自己跑
+（设备关机也算数）—— 四站纯 HTTP，runner 上**不需要 node / playwright**。产出贴进 Run 摘要页，
+同时把 `*-news-digest.md` / `*.jsonl` 作为 artifact 归档 90 天。
+推送默认关闭（Secrets 里加 `LARK_WEBHOOK` 才可开启）；GitHub 的 `schedule` 可能延迟或被暂停，
+要准时可用外部 cron（Cloudflare Worker 之类）调 `workflow_dispatch`。同事 fork 后开箱可用（不依赖 secret）。
+
 ## 三、你必须遵守的纪律
 
 1. **一手优先**：查热点/情报必须走本仓库的 `./intel` 取实时数据，**不得**用模型记忆或搜索摘要冒充「今天的榜」。

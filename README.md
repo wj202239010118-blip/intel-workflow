@@ -91,6 +91,20 @@ bash install.sh --install-scheduler   # 额外装「每天自动查行业资讯�
 - **改版会被点名**：某站条目数跌破上次的 40%（且少于 3 条）时，日报顶部出现英文告警行
   （`layout may have changed or access is limited`），不至于悄悄发一份空日报。
 
+## 云腿：让日报在云端每天自己跑（可选）
+
+设备关机也要出日报时，把这条腿放到 **GitHub Actions** —— 仓库自带 `.github/workflows/news-daily.yml`。
+
+- **触发**：每天 `04:00 UTC`（= 09:30 IST）自动一次；也能在 Actions 页面手动 `Run workflow`（补跑 / 首次验证）。
+- **要装什么**：什么都不用。四站全是纯 HTTP（RSS / sitemap），runner 上**不需要 node、不需要 playwright**。
+- **产出**：日报正文直接贴在 **Run 摘要页**（打开 Actions 就能读，不必下载），同时
+  `<日期>-news-digest.md` 与 `*.jsonl` 作为 artifact 归档 90 天。
+- **默认不推送**：workflow 里的推送步骤是注释掉的。要推到 Lark 群：仓库 Settings → Secrets 加
+  `LARK_WEBHOOK`（机器人开了签名再加 `LARK_SECRET`），再把那一步的 `if` 改成 `true` —— 发出去撤不回，先看过内容。
+- **可靠性**：GitHub 的 `schedule` 在高峰期可能延迟甚至跳过，仓库连续 60 天无提交活动也会被暂停；
+  要准时可以用外部 cron（Cloudflare Worker 之类）调 `workflow_dispatch` 触发。
+- **同事怎么用**：fork 本仓库 → 在他自己的 Actions 里跑一次即可（不依赖任何 secret，fork 后开箱可用）。
+
 ## 凭据（全部可选，由使用者自带；仓库不含任何凭据）
 
 | 平台 | 需要什么 | 去哪拿 |
@@ -136,3 +150,6 @@ M6（2026-10-11）：`news` 每日资讯检索 + `schedule` launchd 定时落地
 M7（2026-10-12）：`news` 改为**零浏览器** —— 新增 XML sitemap 通道（`news/sitemap.py`），
 内置四站全部走纯 HTTP（`igaming.news` 用 `/news-sitemap.xml`，其余三站用 RSS）；
 本机未装 playwright 实测 `4 sources · 55 items`，单测 68 项通过。
+M8（2026-10-12 云端）：加 `.github/workflows/news-daily.yml` —— 日报在 GitHub Actions 每天自动跑
+（纯 HTTP，runner 上无需 node / playwright）；首轮手动触发即成功（17s，`4 sources · 55 items`），
+产出贴 Run 摘要 + artifact 归档 90 天，推送默认关闭。

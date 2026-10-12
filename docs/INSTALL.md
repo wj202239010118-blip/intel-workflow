@@ -124,6 +124,13 @@ python3 intel schedule status               # 查：装没装 / 今天跑过没 
 - 不想要了：`python3 intel schedule uninstall`。
 - 日志：`~/Library/Logs/intel-workflow-news.log`。
 
+**另一种做法：交给云端（设备关机也跑）**。把仓库 fork 到自己账号，打开 Actions 页 → `news-daily` →
+`Run workflow` 手动跑一次验证；之后它会每天 `04:00 UTC`（= 09:30 IST）自动跑。四站全是纯 HTTP，
+云端**不用装 node / playwright，也不需要任何凭据**；日报会贴在该次运行的 **Summary** 里（打开就能读），
+同时归档为 artifact（保留 90 天）。要让它推到 Lark 群，才需要在仓库 Settings → Secrets 加
+`LARK_WEBHOOK`，并打开 workflow 里那段可选步骤（发出去撤不回，先看过内容）。
+多机 / 多人各自想看日报时，这条路比本机 launchd 省事。
+
 ---
 
 ## 五、卡住了怎么办
