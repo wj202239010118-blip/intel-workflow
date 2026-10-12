@@ -116,6 +116,52 @@ intel digest                                             # 对比 out/ 里的历
 
 ---
 
+### 3.4 每日资讯检索（news）—— 从「查热点」扩到「守行业站」
+
+同事场景：**每天把 iGaming 行业新闻汇总推给团队**，且**设备开机时才跑**（不必常驻）。与上面「平台热点」共享闸门与输出纪律，但取数方式不同：
+
+| 维度 | 热点腿（hot） | 资讯腿（news） |
+|---|---|---|
+| 取数 | 平台 API / 公开页（`core/http.py` 一次 GET） | **有头 Chromium 渲染列表页**（`tools/news_fetch.js`） |
+| 会话 | 免登录或使用者自带 cookie | **持久 profile**（`~/.cache/intel-workflow/browser-profile`）：cookie / 同意弹窗 / 将来某站的登录态次次复用 |
+| 站点 | 平台 adapter（`adapters/*`） | 站点清单（`news/sites.py`，`[news]` 可覆盖或追加） |
+| 抽取 | 各平台字段解析 | 通用启发式（同域链接 + 标题长度 + 排除导航词），抽不准用 `[news.selectors]` 按域名校准 |
+| 产出 | 各平台一份榜 | 跨站**合并成一份英文日报** + 新进/已见标注（对比 `out/*-news.jsonl` 历史） |
+| 触发 | 人手动跑 | **launchd**：`RunAtLoad`（开机/登录一次）+ `StartCalendarInterval`（每天一次） |
+| 推送 | 无 | Lark 自定义机器人 / SMTP 邮件，**默认 dry-run** |
+
+四个写进代码的约束：
+
+1. **幂等按日期**：成功跑过就写 `~/.cache/intel-workflow/news_state.json` 的 `last_success_date`；
+   当天再触发直接跳过（`--force` 才重跑）。这是「开机跑一次」不会退化成反复抓的原因。
+2. **一次导航 = 一次请求**：浏览器子进程自己不受闸门管，所以在 `fetch.py` 里调用前后显式
+   `gate.check` / `gate.record`（与 TikTok 腿同一做法）；命中风控的站点熔断退出，其余站点照常。
+3. **外发禁中文**：日报正文用英文生成，`push.assert_no_cjk` 在发送前硬校验（含 CJK 直接拒发）。
+   本机日志/终端摘要可以中文，进推送通道的不行。
+4. **默认不发**：`push()` 默认 `dry_run=True`，只打印将要发送的内容；真发要 `--send` 且配置里 `enabled = true`。
+   Lark 自定义机器人无撤回 API —— 这条不设「自动发」的默认值。
+
+新增文件：`intel_workflow/news/{sites,feed,fetch,digest,push,schedule}.py`、`tools/news_fetch.js`、
+`tests/test_news.py`；`cli.py` 加 `news` / `schedule` 两个子命令；`config.example.toml` 加
+`[news]` / `[news.selectors]` / `[news.feeds]` / `[push.lark]` / `[push.email]` / `[schedule]` 六段。
+
+**两条取数通道（v0.7 起）**：`site.feed` 有值就走 `news/feed.py` 解析 RSS/Atom（一次普通 GET，
+无浏览器、无 consent 墙、无反爬判定）；没有才渲染列表页。判据来自实测：sbcnews.co.uk 首页在
+**两套 headless（chrome-headless-shell 与 chromium 新 headless）下 bodyLen 逐字节相同（5392）、
+articles=0、navigator.webdriver=false** → 不是「无头被识别」，而是服务端就不返回内容，调浏览器参数无解；
+而它的 `/feed/` 一次 GET 就给 10 条。所以「安全稳定地无头跑」的正确顺序是
+**先找机器接口（RSS/Atom/API）→ 再考虑浏览器**，而不是死磕无头参数。
+
+**并发与健康**：整轮抓取持 `~/.cache/intel-workflow/browser-profile/.lock`（`fcntl.flock` 非阻塞）；
+拿不到就跳过本轮（幂等，下次补上），避免定时任务与手动跑撞 profile 时两边一起挂。
+`digest.scan()` 记录各站最近一次条目数，跌破上次 40%（且 <3）时在日报顶部输出英文告警行。
+
+**未验证项（照实写）**：内置站点用的是**通用启发式抽取**，尚未对四个真实站点做过校准跑
+（需要弹一次有头窗口，由使用者确认后执行）；`[news.selectors]` 是给校准用的出口。
+`launchd` 的 plist 已单测（PATH / RunAtLoad / 时间），但「开机补跑」这一行为依赖 macOS 版本，未端到端实测。
+
+---
+
 ## 4. 双模型协同（默认开启，可关）
 
 > **实现状态（2026-10-10）**：已落地 `intel analyze`。本机实测 `claude` 引擎可用（`claude -p`，22s 产出结论/存疑/待确认）；
@@ -259,3 +305,7 @@ intel-workflow/
 - v0.3（2026-10-10）M1 骨架落地（core + 6 个 adapter + CLI + install.sh）；新增 AGENTS.md / CLAUDE.md / `agent/` 装载件，AI 可直接读仓库完成集成；Twitch/Kick 结论回填。
 - v0.4（2026-10-10）四平台热点齐活：TikTok 走 playwright 渲染（实测通，免 cookie）、IG 走自带 cookie + 对标账号代理指标；两平台均如实报缺凭据/缺组件，不静默降级。
 - v0.5（2026-10-10）M3 双模型协同落地：`intel analyze`（引擎探测 / 独立分析 / 结构化对齐报告）；修 OpenAI 兼容端误启用（三项需配齐）；`mode` 按成功引擎数判定。
+- v0.6（2026-10-11）新增「每日资讯检索」腿（3.4）：有头 Chromium + 持久 profile 跑一组 iGaming 行业站 →
+  整合英文日报 → 可选 Lark/邮件推送；`intel news` / `intel schedule`（launchd：开机/登录一次 + 每天一次，按日期幂等）；
+  推送默认 dry-run + 外发禁中文硬校验；`install.sh --install-scheduler`；新增 `tests/test_news.py`（站点/日报/推送/plist/幂等）。
+  顺带修：内置零依赖 TOML 解析器现在支持 `[a.b]` 嵌套段（与 tomllib 语义对齐）。

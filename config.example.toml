@@ -24,6 +24,46 @@ access_token = ""
 session_id = ""
 seed_accounts = []
 
+[news]
+# 每日检索的资讯站（列表页）。不填 sites/extra_sites 就用内置的一组 iGaming 行业站：
+#   igaming.news / igamingbusiness.com / sbcnews.co.uk / yogonet.com
+# sites = []          # 覆盖内置清单（每项 = 一个列表页 URL）
+# extra_sites = []    # 在内置清单之后追加
+per_site_limit = 15   # 每站最多取多少条
+headless = false      # false = 有头浏览器（默认，同事要求）；true = 无头
+# profile_dir = "~/.cache/intel-workflow/browser-profile"   # 持久 profile：cookie/登录态次次复用
+
+[news.selectors]
+# 通用启发式抽不准时，按域名指定「文章链接」的 CSS 选择器来校准：
+# "www.example.com" = "article h2 a"
+
+[news.feeds]
+# **首选通道**：站点有 RSS/Atom 就给在这里 —— 走普通 HTTP（无浏览器、无 consent 墙、无反爬），
+# 比渲染页面稳得多也轻得多。内置清单里 sbcnews.co.uk 已默认走 feed（它的首页无头下拿不到内容）。
+# "www.example.com" = "https://www.example.com/feed/"
+
+[push.lark]
+# 飞书 / Lark 自定义机器人（群机器人）。默认关闭 —— 打开并真发之前先 dry-run 看内容。
+# ⚠️ 自定义机器人发出去的消息**撤不回**（只能请群管理员删）：务必先 dry-run 确认。
+enabled = false
+webhook = ""
+secret = ""      # 机器人开了「签名校验」才需要
+
+[push.email]
+enabled = false
+host = ""
+port = 465
+user = ""
+password = ""
+sender = ""
+to = []
+subject_prefix = "[iGaming News] "
+
+[schedule]
+hour = 9        # 每天 9:30 跑；开机 / 登录时也会跑一次（当天已成功跑过则跳过）
+minute = 30
+send = false    # true = 定时任务真推送（默认只抓取落盘，不发）
+
 [output]
 dir = "out"
 

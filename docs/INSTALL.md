@@ -102,6 +102,27 @@ git clone <仓库地址> ~/intel-workflow && bash ~/intel-workflow/install.sh
 npm i playwright && npx playwright install chromium
 ```
 
+**要用每日行业资讯（news）**：同一个组件（node + playwright），无需凭据。
+站点若提供 RSS（`/feed/` 之类），优先在 `config.toml` 的 `[news.feeds]` 里配上 —— 它走普通 HTTP，
+不起浏览器，最稳也最省（内置的 sbcnews.co.uk 就是这条通道）。
+
+### 让它每天自己跑（可选）
+
+「设备开机时跑一次 + 每天固定时刻一次」，一条命令装好：
+
+```bash
+cd ~/intel-workflow
+python3 intel news run                      # 先手动跑一次，看看日报长什么样（会弹出浏览器窗口）
+python3 intel schedule install --hour 9 --minute 30   # 再装定时任务
+python3 intel schedule status               # 查：装没装 / 今天跑过没 / 上次成功时间
+```
+
+- 定时任务**默认只抓取落盘，不推送**。要它自动推到 Lark / 邮件：先在 `config.toml` 里把
+  `[push.lark]` 或 `[push.email]` 的 `enabled` 打开并填好，再 `python3 intel schedule install --send`。
+- 当天已经成功跑过就不会重复抓（`--force` 可强制重跑），所以开机多次也不会反复请求。
+- 不想要了：`python3 intel schedule uninstall`。
+- 日志：`~/Library/Logs/intel-workflow-news.log`。
+
 ---
 
 ## 五、卡住了怎么办

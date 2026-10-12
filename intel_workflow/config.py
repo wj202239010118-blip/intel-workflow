@@ -12,27 +12,33 @@ DEFAULT_PATH = ROOT / "config.toml"
 
 
 def _simple_toml(text):
-    """极简 TOML 子集：`[section]` + `key = value`（字符串 / 整数 / 布尔 / 字符串数组）。
+    """极简 TOML 子集：`[section]` / `[a.b]` + `key = value`（字符串 / 整数 / 布尔 / 字符串数组）。
 
-    仅在 tomllib 与 tomli 都不可用时启用；刚好覆盖本项目的 config 结构，
-    并正确处理行尾注释（`key = 15  # 注释`）。
+    仅在 tomllib 与 tomli 都不可用时启用（macOS 自带 Python 3.9）；语义与 tomllib 对齐
+    —— `[a.b]` 解成嵌套 dict，这样 config.section("a.b") 两种解析器下行为一致。
     """
-    data, current = {}, ""
+    data, current = {}, None
     for raw in text.splitlines():
         line = raw.strip()
         if not line or line.startswith("#"):
             continue
         head = re.fullmatch(r"\[([^\]]+)\]", line)
         if head:
-            current = head.group(1)
-            data.setdefault(current, {})
+            node = data
+            for part in [p.strip() for p in head.group(1).split(".")]:
+                child = node.get(part)
+                if not isinstance(child, dict):
+                    child = {}
+                    node[part] = child
+                node = child
+            current = node
             continue
-        if "=" not in line:
+        if "=" not in line or current is None:
             continue
         key, value = line.split("=", 1)
         if " #" in value:  # 去掉行尾注释
             value = value.split(" #", 1)[0]
-        key, value = key.strip(), value.strip()
+        key, value = key.strip().strip('"'), value.strip()
         if len(value) >= 2 and value[0] == value[-1] == '"':
             parsed = value[1:-1]
         elif value.startswith("[") and value.endswith("]"):
@@ -43,7 +49,7 @@ def _simple_toml(text):
             parsed = int(value)
         else:
             parsed = value
-        data.setdefault(current, {})[key] = parsed
+        current[key] = parsed
     return data
 
 
@@ -72,7 +78,14 @@ class Config:
                 raise SystemExit(f"config.toml 解析失败：{exc}")
 
     def section(self, name):
-        value = self.data.get(name)
+        """按名字取一段。兼容两种解析器：tomllib 把 [a.b] 解成嵌套 dict，
+        内置解析器解成扁平的 "a.b" 键 —— 这里两种都认。"""
+        if name in self.data:
+            value = self.data.get(name)
+        else:
+            value = self.data
+            for part in name.split("."):
+                value = value.get(part) if isinstance(value, dict) else None
         return value if isinstance(value, dict) else {}
 
     # --- 凭据（缺则返回空串，由适配器给出「去哪申请」的提示） ---

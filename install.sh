@@ -47,7 +47,15 @@ if [ "${1:-}" = "--uninstall" ]; then
   say "卸载"
   rm -rf "$SKILL_DEST" && echo "  ✅ 已移除 $SKILL_DEST"
   echo "  （config.toml 与 ~/.cache/intel-workflow 的闸门状态未动，需清理请手动删）"
+  echo "  （定时任务另卸：python3 intel schedule uninstall）"
   exit 0
+fi
+
+# 可选：装「每天自动查行业资讯」的 launchd 任务（开机/登录一次 + 每天一次）
+if [ "${1:-}" = "--install-scheduler" ]; then
+  say "装定时任务（launchd）"
+  "$PY" intel schedule install "${@:2}"
+  exit $?
 fi
 
 say "1/6 环境探测（macOS）"
