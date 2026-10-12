@@ -49,6 +49,13 @@ jobs:
           python3 tools/kv_put.py out/daily.html daily:index
           python3 tools/kv_put.py out/daily.html "daily:$(date -u +%F)"
 
+      - name: 推送到 Lark（前 10 条；没配 webhook 时只打印，绝不误发）
+        env:
+          LARK_WEBHOOK: ${{ secrets.LARK_WEBHOOK }}
+          LARK_SECRET: ${{ secrets.LARK_SECRET }}
+          PUBLIC_BASE_URL: ${{ secrets.PUBLIC_BASE_URL }}
+        run: python3 tools/push_top.py --top 10 --send
+
       - name: 归档日报（artifact，保留 90 天）
         uses: actions/upload-artifact@v4
         with:
