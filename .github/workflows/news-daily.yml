@@ -1,0 +1,64 @@
+# iGaming 行业日报 · 每天自动跑（设备关机也能跑）
+#
+# 取数全程纯 HTTP（RSS / sitemap）—— 不需要 node、不需要 playwright、不需要浏览器。
+# 默认**只落盘**：日报进 Actions artifact + 贴进 Run 页面摘要，不推任何群 / 邮件。
+# 想推送：把 LARK_WEBHOOK（可选 LARK_SECRET）加进 Secrets，再把文末「可选推送」的 if 改成 true。
+#
+# 时区：cron 用 UTC。04:00 UTC = 09:30 IST（与本机 `intel schedule` 的默认时刻一致）。
+name: news-daily
+
+on:
+  workflow_dispatch:            # 手动触发（首次验证 / 补跑）
+  schedule:
+    - cron: "0 4 * * *"
+    # 注意：GitHub 的 schedule 在高峰期可能延迟、甚至被跳过；仓库连续 60 天无提交活动也会被暂停。
+    # 要准时可靠，可以用外部 cron（如 Cloudflare Worker）调 workflow_dispatch 触发。
+
+permissions:
+  contents: read
+
+concurrency:
+  group: news-daily
+  cancel-in-progress: false     # 不并发：避免同一天的日报被写两遍
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 离线单测（不联网；抓取前先自检）
+        run: python -m unittest discover -s tests
+
+      - name: 抓取 + 整合英文日报（纯 HTTP，无浏览器）
+        run: python3 intel news run --out out
+
+      - name: 归档日报（artifact，保留 90 天）
+        uses: actions/upload-artifact@v4
+        with:
+          name: news-digest-${{ github.run_id }}
+          path: |
+            out/*-news-digest.md
+            out/*-news.jsonl
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: 把今天的日报贴进 Run 摘要（打开 Actions 页面就能读）
+        run: |
+          {
+            echo "## iGaming 日报 · $(date -u +%F) UTC"
+            echo
+            cat out/*-news-digest.md
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # 可选：推送（默认不做）。先把 LARK_WEBHOOK / LARK_SECRET 加进仓库 Secrets，
+      # 再把 if 改成 true —— Lark 自定义机器人发出去的消息撤不回，务必先看过日报内容。
+      #- name: 可选推送
+      #  if: false
+      #  env:
+      #    LARK_WEBHOOK: ${{ secrets.LARK_WEBHOOK }}
+      #  run: python3 intel news push --send
