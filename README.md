@@ -104,6 +104,7 @@ bash install.sh --install-scheduler   # 额外装「每天自动查行业资讯�
 - **可靠性**：GitHub 的 `schedule` 在高峰期可能延迟甚至跳过，仓库连续 60 天无提交活动也会被暂停；
   要准时可以用外部 cron（Cloudflare Worker 之类）调 `workflow_dispatch` 触发。
 - **同事怎么用**：fork 本仓库 → 在他自己的 Actions 里跑一次即可（不依赖任何 secret，fork 后开箱可用）。
+- **把日报用起来**：`docs/CAMPAIGN-IDEAS.md` 给了「日报 → 蹭热度活动建议」的五步法与可直接复制的 prompt。
 
 ## 凭据（全部可选，由使用者自带；仓库不含任何凭据）
 

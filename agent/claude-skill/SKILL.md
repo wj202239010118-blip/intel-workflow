@@ -30,6 +30,10 @@ description: 查社交平台站内的一手情报与热点（X/YouTube/Twitch/Ki
 `out/<日期>-news-digest.md`（英文）。内置四站（igaming.news / igamingbusiness.com /
 sbcnews.co.uk / yogonet.com）**不需要 node + playwright**。日报正文禁中文；推送默认 dry-run。
 
+**把日报变成活动建议**：日报只是原料，加工方法见 `{{INTEL_DIR}}/docs/CAMPAIGN-IDEAS.md`
+（五步法 + 可直接复制的 prompt）。使用者问「今天有什么能蹭的热点 / 该做什么活动」时按它产出：
+每条建议都要带来源链接与日期，监管风险单列成「今天别碰的」，合规提示写进 brief，外发文案只用 EN / ES。
+
 ## 纪律（必须遵守）
 
 1. 查热点一律走本 CLI 取实时数据，**不得**用记忆/搜索摘要冒充「今天的榜」。
