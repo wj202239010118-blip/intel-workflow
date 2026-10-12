@@ -51,36 +51,41 @@ bash install.sh --install-scheduler   # 额外装「每天自动查行业资讯�
 | `./intel search --platform youtube --q "<kw>"` | 关键词下钻（YouTube） |
 | `./intel verify --platform instagram --handle <@handle>` | 账号核实（Instagram，需自带 cookie） |
 | `./intel analyze --platform all --region US` | 取事实 + 双模型交叉复核（结论 / 存疑 / 一致 / 分歧） |
-| `./intel news run` | 一组 iGaming 行业站每日检索 → 整合日报（有头浏览器，持久 profile 复用登录态） |
+| `./intel news run` | 一组 iGaming 行业站每日检索 → 整合日报（feed/sitemap 纯 HTTP，无需浏览器） |
 | `./intel schedule install` | 装 launchd 定时：开机 / 登录跑一次 + 每天固定时刻一次（当天已跑过会跳过） |
 
 ## 每日资讯检索（news）
 
-面向「每天把行业新闻汇总推给同事」的场景：有头 Chromium + **持久 profile**，
+面向「每天把行业新闻汇总推给同事」的场景：默认**纯 HTTP 取数**（feed / sitemap），
 一次跑完一组 iGaming 行业站（默认 `igaming.news` / `igamingbusiness.com` / `sbcnews.co.uk` / `yogonet.com`），
-合成一份**英文**日报，可选推到 Lark 群 / 邮件。
+合成一份**英文**日报，可选推到 Lark 群 / 邮件。**四个内置站都不需要 node + playwright。**
 
 ```bash
 ./intel news run                        # 抓取 + 整合日报 → out/<日期>-news-digest.md（同时打印）
-./intel news run --headless             # 无头（默认有头；有头更容易拿到渲染后内容）
 ./intel news push                       # 把最近一份日报推出去（默认 dry-run，只打印不发）
 ./intel news run --send                 # 真发（配置齐备才生效；发前建议先 dry-run 看过内容）
+./intel news run --headless             # 只有浏览器通道的站点才用得到（内置四站都用不到）
 ./intel schedule install --hour 9 --minute 30   # 开机/登录一次 + 每天 9:30 一次
 ./intel schedule status                 # 装没装 / 今天跑过没 / 上次成功时间
 ```
 
-- **登录态复用**：浏览器用持久 profile（默认 `~/.cache/intel-workflow/browser-profile`）——
+- **取数三条通道，自动选**（前两条完全不碰浏览器）：
+  1. `[news.feeds]`（或内置）的 **RSS/Atom** —— 最稳也最轻：一次 GET、几十 KB、无 JS、无 consent 墙、
+     不会被当 bot。`sbcnews.co.uk`、`igamingbusiness.com`、`yogonet.com` 走这条。
+  2. `[news.sitemaps]`（或内置）的 **XML sitemap** —— 站点没给 feed 时通常还有它，同为纯 HTTP。
+     内置的 `igaming.news` 走这条：它没有 RSS（`/feed/`、`/rss.xml` 都 404），但 `/news-sitemap.xml`
+     一次 GET 就给全部文章（`loc` + `news:publication_date` + `news:title`）。配 `/sitemap.xml`
+     （index）也行 —— 会自动跟到含 `news` 的子 sitemap，跟进时按闸门的最小间隔等待。
+  3. 两者都没有才**渲染列表页**（有头 Chromium + 持久 profile，需要 `node + playwright`）；
+     抽不准时用 `[news.selectors]` 按域名配「文章链接」的 CSS 选择器校准。
+- **登录态复用**：走浏览器通道时用持久 profile（默认 `~/.cache/intel-workflow/browser-profile`）——
   cookie、同意弹窗、（将来某站要登录时的）登录态都留在这份 profile 里，不必每次重建会话。
 - **幂等**：当天已经成功跑过就跳过（`--force` 强制重跑）。所以「开机跑一次 + 每天一次」不会变成反复抓。
 - **默认不发**：推送默认 dry-run，只把将要发送的内容打印出来；确认后再加 `--send`。
   Lark 自定义机器人发出去的消息**撤不回**，务必先看清楚。
 - **外发禁中文**：日报正文是英文，含中文字符会被直接拒发。
-- **抽不准就校准**：给该域名在 `[news.selectors]` 里配一条文章链接的 CSS 选择器（见 `config.example.toml`）。
-- 抓取仍走同一套闸门：每站每域名一次导航请求，命中风控即熔断、不重试。
-- **feed 优先**（最稳的一条）：站点有 RSS/Atom 就配 `[news.feeds]` —— 走普通 HTTP，
-  没有 JS、没有 consent 墙、不会被当 bot 判定，几十 KB 一次拿全。内置清单里 `sbcnews.co.uk`
-  已默认走 feed：它的首页在无头下只吐 5392 字节空壳（换 chromium 新 headless 模式逐字节相同，
-  说明是服务端不给内容，不是自动化被识别），而 `/feed/` 一次 GET 就给 10 条。
+- 抓取仍走同一套闸门：同域名两次请求之间有最小间隔（sitemap index 自动跟进时同样等待），
+  命中风控即熔断、不重试。
 - **不会互相撞**：整轮抓取先拿 profile 文件锁；定时任务与手动跑撞上时，后到的这轮直接跳过
   （幂等，下次跑会补上）—— 而不是两边一起挂。
 - **改版会被点名**：某站条目数跌破上次的 40%（且少于 3 条）时，日报顶部出现英文告警行
@@ -96,7 +101,7 @@ bash install.sh --install-scheduler   # 额外装「每天自动查行业资讯�
 | Kick | app token（免费） | https://dev.kick.com 建 app |
 | TikTok | 无凭据（需 node + playwright 渲染页面） | `npm i playwright && npx playwright install chromium` |
 | Instagram | sessionid cookie + 对标账号 ⚠️ **法律风险高于其它平台**（读取的是非公开端点，需自行评估） | 浏览器登录 IG 取 sessionid；`seed_accounts` 配几个对标账号 |
-| news（每日资讯） | 无凭据（有头浏览器渲染公开列表页） | 需 node + playwright；推送另需 `[push.lark]` / `[push.email]` |
+| news（每日资讯） | 无凭据（内置四站走 RSS / sitemap，纯 HTTP） | **不需要** node + playwright（只有自己新加的、既无 feed 也无 sitemap 的站点才需要）；推送另需 `[push.lark]` / `[push.email]` |
 
 缺凭据不会静默失败：命令会直接告诉你缺什么、去哪申请。
 
@@ -128,3 +133,6 @@ CI 在 push 与 PR 时跑（Python 3.9 与 3.12 双版本 + gitleaks 密钥扫�
 M1–M3：`hot` 已通 YouTube / X / Twitch / TikTok；`analyze` 双模型交叉复核可用（本机实测 claude 引擎）；Kick 待使用者 token；Instagram 待使用者 cookie + 对标账号。
 M6（2026-10-11）：`news` 每日资讯检索 + `schedule` launchd 定时落地（有头持久 profile / 英文日报 / 默认 dry-run 推送）；
 真实站点的一次校准跑由使用者确认后执行（会弹出有头窗口）。
+M7（2026-10-12）：`news` 改为**零浏览器** —— 新增 XML sitemap 通道（`news/sitemap.py`），
+内置四站全部走纯 HTTP（`igaming.news` 用 `/news-sitemap.xml`，其余三站用 RSS）；
+本机未装 playwright 实测 `4 sources · 55 items`，单测 68 项通过。

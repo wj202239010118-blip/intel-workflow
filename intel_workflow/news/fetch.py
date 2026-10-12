@@ -1,8 +1,11 @@
-"""资讯站取数：两条通道，按站点配置自动选。
+"""资讯站取数：三条通道，按站点配置自动选。
 
   1. **feed（首选）** —— 站点给了 RSS/Atom 地址就走 core.http 一次普通 GET：
      无浏览器、无 consent 墙、无反爬判定，最稳也最轻（闸门由 core.http 内部 check/record）。
-  2. **浏览器** —— 没有 feed 才渲染列表页：有头（默认）或 `--headless`，持久 profile
+  2. **sitemap** —— 没有 feed 但给了 XML sitemap 地址：同样纯 HTTP。指向的是 sitemapindex
+     时自动跟一层到子 sitemap（优先名字含 news 的，如 /news-sitemap.xml）；跟随时按闸门的
+     最小间隔等待，不绕过限速。**有了 feed 或 sitemap，就完全不需要 node + playwright。**
+  3. **浏览器** —— 两者都没有才渲染列表页：有头（默认）或 `--headless`，持久 profile
      复用 cookie / consent 选择 / 登录态。浏览器子进程本身绕过 core.http，所以调用前后
      显式 gate.check / gate.record（每个域名每天一次导航）。
 
@@ -15,12 +18,14 @@ import fcntl
 import json
 import os
 import pathlib
+import time
 
 from ..adapters.base import Degraded
 from ..core import node
 from ..core.gate import RateLimited
 from ..core.model import Intel, Item
 from . import feed as feed_parser
+from . import sitemap as sitemap_parser
 
 TOOLS = pathlib.Path(__file__).resolve().parent.parent.parent / "tools" / "news_fetch.js"
 DEFAULT_PROFILE = pathlib.Path.home() / ".cache" / "intel-workflow" / "browser-profile"
@@ -39,6 +44,15 @@ def wants_headless(cfg=None):
     if cfg is not None:
         return cfg.section("news").get("headless") is True
     return False
+
+
+def channel_of(site):
+    """这个站点会走哪条通道（打印/测试用）。"""
+    if site.feed:
+        return "feed"
+    if site.sitemap:
+        return "sitemap"
+    return "browser"
 
 
 # --- 通道 1：feed（无浏览器） ---
@@ -66,7 +80,56 @@ def fetch_feed(site, http, limit=None):
     )
 
 
-# --- 通道 2：浏览器渲染列表页 ---
+# --- 通道 2：sitemap（无浏览器） ---
+
+def _wait_min_interval(http):
+    """同域连发第二次请求前，等够闸门的最小间隔（尊重闸门，不绕过）。"""
+    gate = getattr(http, "gate", None)
+    gap = int(getattr(gate, "min_interval", 0) or 0)
+    if gap > 0:
+        time.sleep(gap + 1)
+
+
+def fetch_sitemap(site, http, limit=None):
+    """XML sitemap → Intel；是 sitemapindex 就自动跟一层到含 "news" 的子 sitemap。"""
+    url = site.sitemap
+    try:
+        _status, text = http.get(url, domain=site.domain)
+    except RateLimited:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise Degraded(f"{site.key}：sitemap 取不到 → {type(exc).__name__}: {exc}")
+
+    if sitemap_parser.is_index(text):
+        children = sitemap_parser.child_sitemaps(text)
+        if children:
+            url = children[0]
+            _wait_min_interval(http)
+            try:
+                _status, text = http.get(url, domain=site.domain)
+            except RateLimited:
+                raise
+            except Exception as exc:  # noqa: BLE001
+                raise Degraded(f"{site.key}：子 sitemap 取不到（{url}）→ {type(exc).__name__}: {exc}")
+
+    items = [
+        Item(rank=it["rank"], title=it["title"], url=it["url"],
+             metrics={"time": it.get("time", ""), "site": site.domain})
+        for it in sitemap_parser.parse(text, limit=limit or site.limit)
+    ]
+    if not items:
+        raise Degraded(
+            f"{site.key}：sitemap 有响应但解析不出条目"
+            "（把 [news.sitemaps] 直接指向子 sitemap，例如 .../news-sitemap.xml）"
+        )
+    return Intel(
+        platform=site.key, kind="news", method="sitemap",
+        source=f"{site.domain} sitemap（HTTP，无浏览器）",
+        confidence="high", items=items,
+    )
+
+
+# --- 通道 3：浏览器渲染列表页 ---
 
 def fetch_site(site, http, profile=None, headless=False, wait=2500, timeout=45):
     if not node.node_available():
@@ -127,9 +190,12 @@ def fetch_site(site, http, profile=None, headless=False, wait=2500, timeout=45):
 
 
 def fetch(site, http, profile=None, headless=False, wait=2500, timeout=45):
-    """按站点配置选通道：有 feed 走 HTTP（稳），否则渲染列表页。"""
-    if site.feed:
+    """按站点配置选通道：feed / sitemap（纯 HTTP，稳）优先，都没有才渲染列表页。"""
+    channel = channel_of(site)
+    if channel == "feed":
         return fetch_feed(site, http)
+    if channel == "sitemap":
+        return fetch_sitemap(site, http)
     return fetch_site(site, http, profile=profile, headless=headless, wait=wait, timeout=timeout)
 
 

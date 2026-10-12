@@ -122,10 +122,10 @@ intel digest                                             # 对比 out/ 里的历
 
 | 维度 | 热点腿（hot） | 资讯腿（news） |
 |---|---|---|
-| 取数 | 平台 API / 公开页（`core/http.py` 一次 GET） | **有头 Chromium 渲染列表页**（`tools/news_fetch.js`） |
-| 会话 | 免登录或使用者自带 cookie | **持久 profile**（`~/.cache/intel-workflow/browser-profile`）：cookie / 同意弹窗 / 将来某站的登录态次次复用 |
-| 站点 | 平台 adapter（`adapters/*`） | 站点清单（`news/sites.py`，`[news]` 可覆盖或追加） |
-| 抽取 | 各平台字段解析 | 通用启发式（同域链接 + 标题长度 + 排除导航词），抽不准用 `[news.selectors]` 按域名校准 |
+| 取数 | 平台 API / 公开页（`core/http.py` 一次 GET） | **feed / sitemap（纯 HTTP）优先**，都没有才用有头 Chromium 渲染列表页（`tools/news_fetch.js`） |
+| 会话 | 免登录或使用者自带 cookie | 走浏览器通道时才用**持久 profile**（`~/.cache/intel-workflow/browser-profile`）：cookie / 同意弹窗 / 将来某站的登录态次次复用 |
+| 站点 | 平台 adapter（`adapters/*`） | 站点清单（`news/sites.py`，`[news]` 可覆盖或追加；内置四站已全部配好 feed/sitemap） |
+| 抽取 | 各平台字段解析 | RSS/Atom / XML sitemap 按字段解析；只有浏览器通道才用通用启发式（同域链接 + 标题长度 + 排除导航词），抽不准用 `[news.selectors]` 按域名校准 |
 | 产出 | 各平台一份榜 | 跨站**合并成一份英文日报** + 新进/已见标注（对比 `out/*-news.jsonl` 历史） |
 | 触发 | 人手动跑 | **launchd**：`RunAtLoad`（开机/登录一次）+ `StartCalendarInterval`（每天一次） |
 | 推送 | 无 | Lark 自定义机器人 / SMTP 邮件，**默认 dry-run** |
@@ -141,24 +141,37 @@ intel digest                                             # 对比 out/ 里的历
 4. **默认不发**：`push()` 默认 `dry_run=True`，只打印将要发送的内容；真发要 `--send` 且配置里 `enabled = true`。
    Lark 自定义机器人无撤回 API —— 这条不设「自动发」的默认值。
 
-新增文件：`intel_workflow/news/{sites,feed,fetch,digest,push,schedule}.py`、`tools/news_fetch.js`、
+新增文件：`intel_workflow/news/{sites,feed,sitemap,fetch,digest,push,schedule}.py`、`tools/news_fetch.js`、
 `tests/test_news.py`；`cli.py` 加 `news` / `schedule` 两个子命令；`config.example.toml` 加
-`[news]` / `[news.selectors]` / `[news.feeds]` / `[push.lark]` / `[push.email]` / `[schedule]` 六段。
+`[news]` / `[news.selectors]` / `[news.feeds]` / `[news.sitemaps]` / `[push.lark]` / `[push.email]` / `[schedule]` 七段。
 
-**两条取数通道（v0.7 起）**：`site.feed` 有值就走 `news/feed.py` 解析 RSS/Atom（一次普通 GET，
-无浏览器、无 consent 墙、无反爬判定）；没有才渲染列表页。判据来自实测：sbcnews.co.uk 首页在
-**两套 headless（chrome-headless-shell 与 chromium 新 headless）下 bodyLen 逐字节相同（5392）、
-articles=0、navigator.webdriver=false** → 不是「无头被识别」，而是服务端就不返回内容，调浏览器参数无解；
-而它的 `/feed/` 一次 GET 就给 10 条。所以「安全稳定地无头跑」的正确顺序是
-**先找机器接口（RSS/Atom/API）→ 再考虑浏览器**，而不是死磕无头参数。
+**三条取数通道（v0.8 起，前两条纯 HTTP）**，按 `site.feed → site.sitemap → 浏览器` 自动选：
+1. **feed**：`news/feed.py` 解析 RSS/Atom —— 一次普通 GET，无浏览器、无 consent 墙、无反爬判定。
+2. **sitemap**：`news/sitemap.py` 解析 XML sitemap（含 Google News 扩展的 `news:title` /
+   `news:publication_date`）；给的是 `sitemapindex` 时自动跟一层到含 `news` 的子 sitemap，
+   跟进前按闸门 `min_interval` 等待（同域第二次请求不绕过限速）。
+3. **浏览器**：两者都没有才渲染列表页（`tools/news_fetch.js`），抽不准按域名配 `[news.selectors]`。
+
+顺序来自实测：sbcnews.co.uk 首页在**两套 headless（chrome-headless-shell 与 chromium 新 headless）
+下 bodyLen 逐字节相同（5392）、articles=0、navigator.webdriver=false** → 不是「无头被识别」，
+而是服务端就不返回内容，调浏览器参数无解；而它的 `/feed/` 一次 GET 就给 10 条。
+2026-10-12 据此把剩下三站也逐站找机器接口，结果**四站全有纯 HTTP 通道**：
+sbcnews / igamingbusiness / yogonet 走 RSS；igaming.news 只有 sitemap（`/feed/`、`/rss.xml`
+都 404，`/news-sitemap.xml` 一次 GET 给全部文章）→ **内置四站不需要 node + playwright**，
+同事端零组件依赖。正确顺序始终是**先找机器接口（RSS/Atom/sitemap/API）→ 再考虑浏览器**，
+而不是死磕无头参数。
 
 **并发与健康**：整轮抓取持 `~/.cache/intel-workflow/browser-profile/.lock`（`fcntl.flock` 非阻塞）；
 拿不到就跳过本轮（幂等，下次补上），避免定时任务与手动跑撞 profile 时两边一起挂。
 `digest.scan()` 记录各站最近一次条目数，跌破上次 40%（且 <3）时在日报顶部输出英文告警行。
 
-**未验证项（照实写）**：内置站点用的是**通用启发式抽取**，尚未对四个真实站点做过校准跑
-（需要弹一次有头窗口，由使用者确认后执行）；`[news.selectors]` 是给校准用的出口。
-`launchd` 的 plist 已单测（PATH / RunAtLoad / 时间），但「开机补跑」这一行为依赖 macOS 版本，未端到端实测。
+**实测（2026-10-12）**：本机**未装 playwright**（仓库无 `node_modules`）时 `intel news run`
+拿到 `4 sources · 55 items`（igaming 15 sitemap / igamingbusiness 15 feed / sbcnews 10 feed /
+yogonet 15 feed）—— 「零浏览器」这条路已端到端跑通（离线单测 68 项通过）。
+
+**未验证项（照实写）**：浏览器通道的通用启发式抽取仍未对真实站点校准（内置四站已全走纯 HTTP，
+默认不触发它）；`launchd` 的 plist 已单测（PATH / RunAtLoad / 时间），但「开机补跑」这一行为
+依赖 macOS 版本，未端到端实测；同事机器从零安装的端到端、以及云腿（GitHub Actions）均待验证。
 
 ---
 

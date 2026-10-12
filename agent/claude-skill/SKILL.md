@@ -25,8 +25,10 @@ description: 查社交平台站内的一手情报与热点（X/YouTube/Twitch/Ki
 `--region`：YouTube 用 `US` 这类国家码；X 用 `united-states` 这类 slug。
 结果落 `{{INTEL_DIR}}/out/`（`.md` 人读 + `.jsonl` 机读，便于次日对比）。
 
-**news**（每日行业资讯）：有头 Chromium + 持久 profile 跑 `[news]` 的站点列表页，合并成
-`out/<日期>-news-digest.md`（英文）。日报正文禁中文；推送默认 dry-run。
+**news**（每日行业资讯）：默认**纯 HTTP 取数** —— 先 RSS/Atom（`[news.feeds]`），再 XML sitemap
+（`[news.sitemaps]`），两者都没有才渲染列表页。一次跑完站点清单，合并成
+`out/<日期>-news-digest.md`（英文）。内置四站（igaming.news / igamingbusiness.com /
+sbcnews.co.uk / yogonet.com）**不需要 node + playwright**。日报正文禁中文；推送默认 dry-run。
 
 ## 纪律（必须遵守）
 
@@ -42,6 +44,8 @@ description: 查社交平台站内的一手情报与热点（X/YouTube/Twitch/Ki
 
 - `⛔ ...冷却中 / 间隔不足`：闸门保护，等最小间隔（默认 15s）重试，不要绕开。
 - `⚠️ 缺凭据`：让使用者本人申请并填 `{{INTEL_DIR}}/config.toml`；不要代填第三方凭据。
-- `news`：`缺 playwright 依赖` → `npm i playwright && npx playwright install chromium`（或给 `INTEL_NODE_PATH`）；
-  `未抽到条目` → 先试该域名的 RSS（`[news.feeds]`，无浏览器最稳），再考虑 `[news.selectors]`；
+- `news`：`未抽到条目` → 依次试该域名的 RSS（`[news.feeds]`）、XML sitemap（`[news.sitemaps]`）——
+  两者都是纯 HTTP，都比渲染稳；都对不上再考虑 `[news.selectors]`。
+  `缺 playwright 依赖` 只会在**浏览器通道**出现（内置四站用不到）→
+  `npm i playwright && npx playwright install chromium`（或给 `INTEL_NODE_PATH`）；
   `今天已跑过 → 跳过` 是幂等，正常现象（要重跑加 `--force`）；`另一个 news 进程正在用同一 profile` 是并发保护，别并发跑。

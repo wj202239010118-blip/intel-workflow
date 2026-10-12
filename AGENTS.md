@@ -62,11 +62,14 @@
 `--region`：YouTube 用 `US` 这类国家码；X 用 `united-states` 这类 slug。
 输出落 `out/`（`.md` 人读 + `.jsonl` 机读，便于次日对比）。
 
-**news**：有头 Chromium + 持久 profile（默认 `~/.cache/intel-workflow/browser-profile`）跑 `[news]` 里的站点列表页
-（不配就用内置的 igaming.news / igamingbusiness.com / sbcnews.co.uk / yogonet.com），
-合并成 `out/<日期>-news-digest.md`；`--force` 强制重跑，`--headless` 无头，`--send` 真推送，`--sites` 临时换站点。
-取数通道按优先级自动选：站点有 RSS/Atom 就用 `[news.feeds]` 配的 feed（**普通 HTTP，不起浏览器，最稳**），
-否则渲染列表页、抽不准时按域名配 `[news.selectors]`。
+**news**：默认**纯 HTTP 取数**（feed / sitemap），一次跑完内置四站
+（`igaming.news` / `igamingbusiness.com` / `sbcnews.co.uk` / `yogonet.com`），合并成 `out/<日期>-news-digest.md`；
+`--force` 强制重跑，`--send` 真推送，`--sites` 临时换站点（`--headless` 只有浏览器通道用得到）。
+取数通道自动选、优先级固定：① `[news.feeds]`/内置 RSS/Atom（最稳最轻，永远首选）；
+② `[news.sitemaps]`/内置 XML sitemap（站点没给 feed 时通常还有它，同为纯 HTTP；给的是 sitemapindex
+会自动跟到含 news 的子 sitemap，跟进时按闸门最小间隔等待）；③ 两者都没有才渲染列表页
+（需 `node + playwright`，抽不准时按域名配 `[news.selectors]`）。
+**于是内置四站都不需要 node + playwright** —— 只有自己新加的、既没 feed 也没 sitemap 的站点才需要。
 整轮抓取持 profile 文件锁（并发时后到的那轮跳过，不两边一起挂）；某站条目数骤降会在日报顶部点名。
 
 ## 三、你必须遵守的纪律

@@ -26,6 +26,7 @@ from intel_workflow.news import feed as news_feed  # noqa: E402
 from intel_workflow.news import fetch as news_fetch  # noqa: E402
 from intel_workflow.news import push as news_push  # noqa: E402
 from intel_workflow.news import schedule as news_sched  # noqa: E402
+from intel_workflow.news import sitemap as news_sitemap  # noqa: E402
 from intel_workflow.news import sites as news_sites  # noqa: E402
 
 
@@ -290,6 +291,83 @@ class FeedSiteTest(unittest.TestCase):
         self.assertEqual(got["extra.org"].feed, "https://extra.org/rss")
 
 
+class SitemapTest(unittest.TestCase):
+    """sitemap 解析（离线）。样本取自 igaming.news/news-sitemap.xml（Google News 扩展）。"""
+
+    NEWS_SITEMAP = """<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:news="http://www.google.com/schemas/sitemap-news/0.9">
+  <url>
+    <loc>https://igaming.news/news/2026-10-09/wazdan-bolsters-danish-market-position</loc>
+    <news:news>
+      <news:publication><news:name>iGaming News</news:name><news:language>en</news:language></news:publication>
+      <news:publication_date>2026-10-09T00:00:00.000Z</news:publication_date>
+      <news:title>Wazdan Bolsters Danish Market Position</news:title>
+    </news:news>
+  </url>
+  <url>
+    <loc>https://igaming.news/news/2026-10-08/maine-regulator-targets-q1-2027</loc>
+    <news:news>
+      <news:publication_date>2026-10-08T00:00:00.000Z</news:publication_date>
+      <news:title>Maine Regulator Targets Q1 2027</news:title>
+    </news:news>
+  </url>
+</urlset>"""
+
+    INDEX = """<?xml version="1.0" encoding="UTF-8"?>
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <sitemap><loc>https://x.example/sitemap-pages.xml</loc></sitemap>
+  <sitemap><loc>https://x.example/news-sitemap.xml</loc></sitemap>
+</sitemapindex>"""
+
+    def test_news_sitemap_items(self):
+        items = news_sitemap.parse(self.NEWS_SITEMAP, limit=5)
+        self.assertEqual(len(items), 2)
+        self.assertEqual(items[0]["title"], "Wazdan Bolsters Danish Market Position")
+        self.assertEqual(
+            items[0]["url"],
+            "https://igaming.news/news/2026-10-09/wazdan-bolsters-danish-market-position",
+        )
+        self.assertIn("Oct 2026", items[0]["time"])
+
+    def test_plain_sitemap_falls_back_to_slug_title(self):
+        plain = ('<?xml version="1.0"?><urlset><url>'
+                 '<loc>https://x.example/news/wazdan-bolsters-danish-position</loc>'
+                 '<lastmod>2026-10-07</lastmod></url></urlset>')
+        items = news_sitemap.parse(plain)
+        self.assertEqual(items[0]["title"], "Wazdan bolsters danish position")  # 无 <title> 时由 slug 兜底
+        self.assertIn("2026", items[0]["time"])
+
+    def test_index_detection_and_news_first(self):
+        self.assertTrue(news_sitemap.is_index(self.INDEX))
+        self.assertFalse(news_sitemap.is_index(self.NEWS_SITEMAP))
+        self.assertEqual(news_sitemap.child_sitemaps(self.INDEX)[0], "https://x.example/news-sitemap.xml")
+
+    def test_limit_and_garbage(self):
+        self.assertEqual(len(news_sitemap.parse(self.NEWS_SITEMAP, limit=1)), 1)
+        self.assertEqual(news_sitemap.parse("<html>nope</html>"), [])
+        self.assertEqual(news_sitemap.parse(""), [])
+
+
+class ChannelCoverageTest(unittest.TestCase):
+    """默认清单必须**全部**走纯 HTTP —— 否则同事又得装 node + playwright（2026-10-12 改）。"""
+
+    def test_all_builtin_sites_are_browser_free(self):
+        got = news_sites.resolve(_cfg())
+        self.assertEqual({s.domain: news_fetch.channel_of(s) for s in got}, {
+            "igaming.news": "sitemap",
+            "igamingbusiness.com": "feed",
+            "sbcnews.co.uk": "feed",
+            "www.yogonet.com": "feed",
+        })
+
+    def test_sitemap_from_config_by_domain(self):
+        cfg = _cfg({"news": {"extra_sites": ["https://extra.org/"],
+                             "sitemaps": {"extra.org": "https://extra.org/sitemap.xml"}}})
+        got = {s.domain: s for s in news_sites.resolve(cfg)}
+        self.assertEqual(got["extra.org"].sitemap, "https://extra.org/sitemap.xml")
+        self.assertEqual(news_fetch.channel_of(got["extra.org"]), "sitemap")
+
+
 class FetchChannelTest(unittest.TestCase):
     class _StubHttp:
         def __init__(self, body=""):
@@ -300,8 +378,43 @@ class FetchChannelTest(unittest.TestCase):
             self.calls.append(url)
             return 200, self.body
 
-    def _site(self, feed=""):
-        return news_sites.Site(key="sbcnews", url="https://sbcnews.co.uk/", domain="sbcnews.co.uk", feed=feed)
+    def _site(self, feed="", sitemap=""):
+        return news_sites.Site(key="sbcnews", url="https://sbcnews.co.uk/", domain="sbcnews.co.uk",
+                               feed=feed, sitemap=sitemap)
+
+    def test_sitemap_site_never_touches_browser(self):
+        http = self._StubHttp(SitemapTest.NEWS_SITEMAP)
+        intel = news_fetch.fetch(self._site(sitemap="https://igaming.news/news-sitemap.xml"), http,
+                                 profile="/nonexistent-profile")
+        self.assertEqual(intel.method, "sitemap")
+        self.assertEqual(len(intel.items), 2)
+        self.assertEqual(http.calls, ["https://igaming.news/news-sitemap.xml"])  # 一次 HTTP，没起浏览器
+        self.assertEqual(intel.items[0].title, "Wazdan Bolsters Danish Market Position")
+        self.assertIn("Oct 2026", intel.items[0].metrics["time"])
+        for item in intel.items:
+            news_push.assert_no_cjk(item.title)
+
+    def test_feed_wins_over_sitemap(self):
+        site = self._site(feed="https://sbcnews.co.uk/feed/", sitemap="https://sbcnews.co.uk/news-sitemap.xml")
+        self.assertEqual(news_fetch.channel_of(site), "feed")
+
+    def test_sitemap_index_follows_news_child(self):
+        """配的是 sitemapindex 时自动跟到含 news 的子 sitemap（第二次请求按闸门间隔等待）。"""
+        http = self._StubHttp(SitemapTest.NEWS_SITEMAP)
+        http.body = SitemapTest.INDEX           # 第一次给 index，之后给真 sitemap
+        calls = []
+
+        def _get(url, domain=None):
+            calls.append(url)
+            http.body = SitemapTest.NEWS_SITEMAP
+            return 200, SitemapTest.INDEX if len(calls) == 1 else SitemapTest.NEWS_SITEMAP
+
+        http.get = _get
+        http.gate = types.SimpleNamespace(min_interval=0)   # 测试里不等 15 秒
+        intel = news_fetch.fetch(self._site(sitemap="https://x.example/sitemap.xml"), http)
+        self.assertEqual(intel.method, "sitemap")
+        self.assertEqual(calls, ["https://x.example/sitemap.xml", "https://x.example/news-sitemap.xml"])
+
 
     def test_feed_site_never_touches_browser(self):
         http = self._StubHttp(FeedTest.RSS)

@@ -34,13 +34,19 @@ headless = false      # false = 有头浏览器（默认，同事要求）；tru
 # profile_dir = "~/.cache/intel-workflow/browser-profile"   # 持久 profile：cookie/登录态次次复用
 
 [news.selectors]
-# 通用启发式抽不准时，按域名指定「文章链接」的 CSS 选择器来校准：
+# 通用启发式抽不准时，按域名指定「文章链接」的 CSS 选择器来校准（只有浏览器通道用得上）：
 # "www.example.com" = "article h2 a"
 
 [news.feeds]
 # **首选通道**：站点有 RSS/Atom 就给在这里 —— 走普通 HTTP（无浏览器、无 consent 墙、无反爬），
-# 比渲染页面稳得多也轻得多。内置清单里 sbcnews.co.uk 已默认走 feed（它的首页无头下拿不到内容）。
+# 比渲染页面稳得多也轻得多。内置四站里 sbcnews.co.uk / igamingbusiness.com / yogonet.com 走这条。
 # "www.example.com" = "https://www.example.com/feed/"
+
+[news.sitemaps]
+# **次选通道**：站点没给 feed 时，XML sitemap 往往还在（同样是纯 HTTP，无浏览器、无 playwright）。
+# 指向 /sitemap.xml（index）或直接指向子 sitemap 都行 —— 是 index 会自动跟到含 "news" 的子 sitemap。
+# 内置四站里 igaming.news 走这条（它没有 RSS，只有 /news-sitemap.xml）。
+# "www.example.com" = "https://www.example.com/sitemap.xml"
 
 [push.lark]
 # 飞书 / Lark 自定义机器人（群机器人）。默认关闭 —— 打开并真发之前先 dry-run 看内容。

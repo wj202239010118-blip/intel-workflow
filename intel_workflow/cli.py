@@ -51,7 +51,7 @@ def build_parser():
 def _add_news_parser(sub):
     sp = sub.add_parser(
         "news",
-        help="iGaming 资讯站每日检索（有头浏览器 + 持久 profile）→ 整合日报 → 可选推送",
+        help="iGaming 资讯站每日检索（feed/sitemap 优先，纯 HTTP；都没有才用浏览器）→ 整合日报 → 可选推送",
     )
     sp.add_argument("action", nargs="?", default="run", choices=["run", "push"],
                     help="run=抓取+整合日报（默认）／push=把最近一份日报推出去")
@@ -143,9 +143,17 @@ def _news_run(args, cfg):
     profile = args.profile or news_fetch.profile_dir(cfg)
     headless = args.headless or news_fetch.wants_headless(cfg)
 
-    feeds = [s for s in site_list if s.feed]
-    print(f"站点 {len(site_list)} 个（feed {len(feeds)} / 浏览器 {len(site_list) - len(feeds)}）"
-          f" · {'无头' if headless else '有头'} · profile {profile}")
+    counts = {name: sum(1 for s in site_list if news_fetch.channel_of(s) == name)
+              for name in ("feed", "sitemap", "browser")}
+    summary = " / ".join(f"{label} {counts[name]}" for name, label in
+                         (("feed", "feed"), ("sitemap", "sitemap"), ("browser", "浏览器"))
+                         if counts[name])
+    head = f"站点 {len(site_list)} 个（{summary}）"
+    if counts["browser"]:
+        head += f" · {'无头' if headless else '有头'} · profile {profile}"
+    else:
+        head += " · 纯 HTTP（不需要浏览器 / playwright）"
+    print(head)
 
     # 整轮先拿 profile 锁：定时任务与手动跑撞同一个 profile 会让两边都起不来（幂等，跳过即可）
     with news_fetch.profile_lock(profile) as locked:
@@ -155,8 +163,8 @@ def _news_run(args, cfg):
 
         intels, failures = [], []
         for site in site_list:
-            channel = "feed" if site.feed else "browser"
-            print(f"→ {site.key} [{channel}]  {site.feed or site.url}")
+            channel = news_fetch.channel_of(site)
+            print(f"→ {site.key} [{channel}]  {site.feed or site.sitemap or site.url}")
             try:
                 intel = news_fetch.fetch(site, http, profile=profile, headless=headless)
             except RateLimited as exc:

@@ -102,9 +102,10 @@ git clone <仓库地址> ~/intel-workflow && bash ~/intel-workflow/install.sh
 npm i playwright && npx playwright install chromium
 ```
 
-**要用每日行业资讯（news）**：同一个组件（node + playwright），无需凭据。
-站点若提供 RSS（`/feed/` 之类），优先在 `config.toml` 的 `[news.feeds]` 里配上 —— 它走普通 HTTP，
-不起浏览器，最稳也最省（内置的 sbcnews.co.uk 就是这条通道）。
+**要用每日行业资讯（news）**：**不需要额外组件，也不需要凭据** —— 内置四站全部走纯 HTTP：
+站点给 RSS/Atom 就用 `[news.feeds]`（最稳最省），没给就用 `[news.sitemaps]` 的 XML sitemap
+（内置的 igaming.news 只有 sitemap、没有 RSS；给 `/sitemap.xml` 也行，会自动跟到含 news 的子 sitemap）。
+只有你自己新加的、既没 feed 也没 sitemap 的站点，才需要上面那个 node + playwright（渲染列表页）。
 
 ### 让它每天自己跑（可选）
 
@@ -112,7 +113,7 @@ npm i playwright && npx playwright install chromium
 
 ```bash
 cd ~/intel-workflow
-python3 intel news run                      # 先手动跑一次，看看日报长什么样（会弹出浏览器窗口）
+python3 intel news run                      # 先手动跑一次，看看日报长什么样（内置四站不弹浏览器窗口）
 python3 intel schedule install --hour 9 --minute 30   # 再装定时任务
 python3 intel schedule status               # 查：装没装 / 今天跑过没 / 上次成功时间
 ```
