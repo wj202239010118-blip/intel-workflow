@@ -95,7 +95,7 @@ bash install.sh --install-scheduler   # 额外装「每天自动查行业资讯�
 
 设备关机也要出日报时，把这条腿放到 **GitHub Actions** —— 仓库自带 `.github/workflows/news-daily.yml`。
 
-- **触发**：每天 `01:30 UTC`（= 09:30 中国 / 07:00 IST）自动一次；也能在 Actions 页面手动 `Run workflow`（补跑 / 首次验证）。
+- **触发**：每天 `01:30 UTC`（= 09:30 中国 / 07:00 IST）由 Cloudflare Worker（kol-ext-gateway 的 Durable Object alarm）调 `workflow_dispatch` 触发；也能在 Actions 页面手动 `Run workflow`（补跑）。**不用** GitHub 自带的 schedule —— 它会延迟/跳过，且与 Worker 入口并存会双发。
 - **要装什么**：什么都不用。四站全是纯 HTTP（RSS / sitemap），runner 上**不需要 node、不需要 playwright**。
 - **产出**：日报正文直接贴在 **Run 摘要页**（打开 Actions 就能读，不必下载），同时
   `<日期>-news-digest.md` 与 `*.jsonl` 作为 artifact 归档 90 天。
