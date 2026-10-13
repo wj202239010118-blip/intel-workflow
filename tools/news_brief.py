@@ -1,21 +1,23 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""news_brief.py — 每日 iGaming 行业快讯（**全中文、只推当日新闻**）→ Lark 内部通知群。
+"""news_brief.py — 每日 iGaming 行业快讯（**全中文、只推各站"本地当日"的稿**）→ Lark 内部通知群。
 
     同一次 run：`intel news run` → out/<日期>-*.jsonl（每站最新一轮，全量）
-            ↓ 本脚本（按**发布日期**只留当天的条目；AI 把英文标题译成中文）
+            ↓ 本脚本（按**该站所在时区的今天**筛条目；AI 把英文标题译成中文）
     Lark 内部通知群一条快讯卡片：当日条目（中文标题 · 日期，可点）+ 底部「查看完整资讯」
 
-## 为什么取 jsonl 而不是日报 md（2026-10-12 修正）
+## 「当日」的判定基准 = 平台自己的时区（2026-10-13 用户口径）
 
-日报 md 每源只列 15 条，而站点列表页的顺序**不保证最新在前**（实测 igaming.news 前 10 条
-全是 3 天前的稿）—— 当日稿会被截断在外。看板页走的是同一份 jsonl（`page.load_latest`），
-所以这里也从 jsonl 取数：**快讯与看板同源同批**。
+不拿 UTC / 中国的日历日去卡：那四家是欧美行业媒体，中国早上 09:30（UTC 01:30）时
+英国才 02:30、阿根廷还在前一天 22:30 —— 用 UTC 日期判定会把 yogonet 当地的**当天稿**
+误判成"昨天"而丢掉。所以每个站用它**自己时区的今天**来判，条目日期取发布方标注的日期。
+（实测：sbcnews / igamingbusiness → Europe/London；yogonet → America/Argentina/Buenos_Aires。）
+不在这里的站按 UTC 处理，宁可保守也不误判成"当天"。
 
 ## 三条硬纪律（写进代码，不靠自觉）
 
-1. **只推当日**：按发布日期筛（`--lookback N` 可放宽到最近 N 天，默认 0=严格当日）。
-   当天各源都没有新稿 → **什么都不发**（打印说明后正常退出；绝不发空卡片、绝不拿旧闻充当日）。
+1. **只推当日**：按上面的基准筛（`--lookback N` 可放宽到最近 N 天，默认 0）。
+   各站都没有当日新稿 → **什么都不发**（打印说明后正常退出；绝不发空卡片、绝不拿旧闻充当日）。
 2. **默认 dry-run**：不带 `--send` 只打印；没配 `LARK_WEBHOOK` 时即使带 `--send` 也只打印。
 3. **默认拒绝中文**：卡片是中文，属于**内部通知群**口吻（与云腿 daily-report 一致），
    必须显式 `--allow-cjk`。仓库对外的通道仍走 `push.py` 的 `assert_no_cjk`（纯英文）。
@@ -29,7 +31,7 @@
 用法：
     python3 tools/news_brief.py                                   # dry-run：只打印（推荐先跑）
     LARK_WEBHOOK=... python3 tools/news_brief.py --allow-cjk --send   # 真发（内部群）
-    python3 tools/news_brief.py --date 2026-10-12 --lookback 3 --limit 3
+    python3 tools/news_brief.py --now 2026-10-13T01:30 --lookback 1    # 模拟某个时刻（调试）
 """
 import argparse
 import html
@@ -39,6 +41,8 @@ import pathlib
 import re
 import sys
 import time
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))  # noqa: E402
 
@@ -50,6 +54,16 @@ OUT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 
 # A 面资讯页：对外链接一律用 `?news`（Worker 源码注释：URL 里不该出现内部分区的叫法）。
 NEWS_URL = "https://kol-ext-gateway.wj202239010118.workers.dev/?news"
 PER_SOURCE = 6          # 当日每源最多列几条（当日稿通常很少，这里只防爆量）
+HEADLINE_TZ = "Asia/Shanghai"   # 卡片抬头上的日期用中国时间（看的人是中国人）
+
+# 站点所在时区：判定「平台认为的今天」用。不在这里的站按 UTC。
+SITE_TZ = {
+    "sbcnews.co.uk": "Europe/London",
+    "igamingbusiness.com": "Europe/London",
+    "www.yogonet.com": "America/Argentina/Buenos_Aires",
+    "yogonet.com": "America/Argentina/Buenos_Aires",
+    "igaming.news": "UTC",
+}
 
 CJK = re.compile(r"[\u4e00-\u9fff\u3400-\u4dbf]")
 
@@ -62,7 +76,7 @@ TRANSLATE_PROMPT = """你是 iGaming 行业媒体的中文编辑。把下面每�
 """
 
 
-# ── 取数：jsonl（全量）→ 只留当日的条目 ─────────────────────────────────────
+# ── 取数：jsonl（全量）→ 只留各站「本地当日」的条目 ─────────────────────────
 
 def iso_of(time_text):
     """`09 Oct 2026` → `2026-10-09`；解析不了返回 ""。"""
@@ -71,6 +85,15 @@ def iso_of(time_text):
         return "%04d-%02d-%02d" % (t.tm_year, t.tm_mon, t.tm_mday)
     except Exception:
         return ""
+
+
+def site_today(site, now):
+    """该站所在时区此刻的日期 `YYYY-MM-DD` —— 「平台认为的今天」。"""
+    try:
+        tz = ZoneInfo(SITE_TZ.get(site, "UTC"))
+    except Exception:  # noqa: BLE001  (缺 tzdata 时退回 UTC)
+        tz = timezone.utc
+    return now.astimezone(tz).strftime("%Y-%m-%d")
 
 
 def _plain(value):
@@ -84,30 +107,32 @@ def _plain(value):
     return text.strip()
 
 
-def pick(pages, date, lookback_days=0, per_source=PER_SOURCE):
-    """每个来源里**只留发布日期在窗口内**的条目（默认只有 date 当天）。
+def pick(pages, now, lookback_days=0, per_source=PER_SOURCE):
+    """每个来源里**只留发布日期 = 该站当地今天**（或回退窗口内）的条目。
 
-    返回 [(来源名, [row…])]，只含有内容的来源；row = {title, url, time, day}。
-    窗口 = [date - lookback_days, date]（按字符串比即可，ISO 日期天然可比）。
+    返回 [(来源名, 当地日期, [row…])]；row = {title, url, time, day}。
+    窗口按各站自己的"今天"往前推 lookback_days 天算。
     """
-    lo = date
-    if lookback_days > 0:
-        lo = time.strftime("%Y-%m-%d", time.localtime(
-            time.mktime(time.strptime(date, "%Y-%m-%d")) - lookback_days * 86400))
     out = []
     for page in pages:
         site = site_of(page)
+        today = site_today(site, now)
+        if lookback_days > 0:
+            base = datetime.strptime(today, "%Y-%m-%d")
+            lo = (base - timedelta(days=lookback_days)).strftime("%Y-%m-%d")
+        else:
+            lo = today
         rows = []
         for item in page.get("items", []):
             metrics = item.get("metrics") or {}
             day = iso_of(metrics.get("time"))
-            if not day or day < lo or day > date:
+            if not day or day < lo or day > today:
                 continue
             rows.append({"title": _plain(item.get("title")), "url": item.get("url") or "",
                          "time": str(metrics.get("time") or ""), "day": day})
         if rows:
             rows.sort(key=lambda r: r["day"], reverse=True)      # 新的在前
-            out.append((site, rows[:per_source]))
+            out.append((site, today, rows[:per_source]))
     return out
 
 
@@ -121,7 +146,7 @@ def site_of(page):
 
 
 def flat_items(picked):
-    return [row for _, rows in picked for row in rows]
+    return [row for _, _, rows in picked for row in rows]
 
 
 def cn_day(date_str):
@@ -180,14 +205,16 @@ def _div(markdown):
     return {"tag": "div", "text": {"tag": "lark_md", "content": markdown}}
 
 
-def card(title, picked, zh, date_str):
-    """卡片：抬头 + 每个来源一块（中文条目 · 日期）+ 底部按钮。只含当日条目。"""
-    n = sum(len(rows) for _, rows in picked)
-    blocks = [_div("**今日 iGaming 行业动态**\n%s · 共 %d 条 / %d 个来源 · 仅当日新稿"
-                   % (cn_day(date_str), n, len(picked)))]
+def card(title, picked, zh, note=""):
+    """卡片：抬头 + 每个来源一块（中文条目 · 该站日期）+ 底部按钮。只含各站当地当日的条目。"""
+    n = sum(len(rows) for _, _, rows in picked)
+    head = "**今日 iGaming 行业动态**\n%d 条 / %d 个来源 · 各站按**自身时区的当天**取稿" % (n, len(picked))
+    if note:
+        head += "\n" + note
+    blocks = [_div(head)]
     idx = 0
-    for site, rows in picked:
-        lines = ["**%s**" % site]
+    for site, today, rows in picked:
+        lines = ["**%s**（%s）" % (site, cn_day(today))]
         for row in rows:
             label = zh[idx] if zh else row["title"]
             lines.append("[%s](%s) · %s" % (_md_title(label), row["url"], cn_day(row["day"])))
@@ -206,7 +233,7 @@ def flat_text(title, picked, zh):
     """给中文闸看的纯文本。"""
     parts = [title]
     idx = 0
-    for site, rows in picked:
+    for site, _today, rows in picked:
         parts.append(site)
         for _ in rows:
             parts.append(zh[idx] if zh else "")
@@ -217,10 +244,12 @@ def flat_text(title, picked, zh):
 # ── 主流程 ──────────────────────────────────────────────────────────────────
 
 def main():
-    ap = argparse.ArgumentParser(description="日报 → Lark 内部群快讯卡片（全中文、只推当日）")
-    ap.add_argument("--date", default="", help="日期 YYYY-MM-DD（默认今天）；读 out/<date>-*.jsonl")
+    ap = argparse.ArgumentParser(description="日报 → Lark 内部群快讯卡片（全中文、只推各站当地当日）")
+    ap.add_argument("--outdir", default=OUT, help="抓取结果目录（读 <date>-*.jsonl）")
+    ap.add_argument("--date", default="", help="读哪天的 jsonl（默认按 HEADLINE_TZ 的今天）")
+    ap.add_argument("--now", default="", help="把这个时刻当成'现在'（ISO，调试用；如 2026-10-13T01:30）")
     ap.add_argument("--lookback", type=int, default=0,
-                    help="放宽到最近 N 天（默认 0 = 严格只当日）")
+                    help="放宽到最近 N 天（默认 0 = 严格各站当地当天）")
     ap.add_argument("--limit", type=int, default=PER_SOURCE, help="每源最多几条（默认 6）")
     ap.add_argument("--no-translate", action="store_true", help="不译中文，直接用英文原标题")
     ap.add_argument("--allow-cjk", action="store_true",
@@ -229,18 +258,27 @@ def main():
     ap.add_argument("--json", action="store_true", help="打印将要发送的 payload")
     a = ap.parse_args()
 
-    date = a.date or time.strftime("%Y-%m-%d")
-    pages = news_page.load_latest(OUT, date)
+    now = datetime.now(timezone.utc)
+    if a.now:
+        parsed = datetime.fromisoformat(a.now)
+        now = parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed
+
+    today_cn = now.astimezone(ZoneInfo(HEADLINE_TZ)).strftime("%Y-%m-%d")
+    date = a.date or today_cn
+    pages = news_page.load_latest(a.outdir, date)
     if not pages:
-        print("❌ 找不到 %s 的抓取结果（%s/<date>-*.jsonl）——先跑 `./intel news run`" % (date, OUT))
+        print("❌ 找不到 %s 的抓取结果（%s/<date>-*.jsonl）——先跑 `./intel news run`" % (date, a.outdir))
         return 1
 
     total = sum(len(p.get("items") or []) for p in pages)
-    picked = pick(pages, date, a.lookback, a.limit)
+    picked = pick(pages, now, a.lookback, a.limit)
     if not picked:
-        # 当日各源都没有新稿：不发空卡片、不拿旧闻充当日（用户口径：只推当日）
-        print("ℹ️  %s 各来源**没有当日新稿** → 不发。" % date)
-        print("    （抓取共 %d 条 / %d 个来源，但发布日期都不是 %s）" % (total, len(pages), date))
+        # 各站都没有"当地当天"的稿：不发空卡片、不拿旧闻充当日
+        print("ℹ️  %s 各来源**没有当地当天的新稿** → 不发。" % today_cn)
+        print("    （抓取共 %d 条 / %d 个来源）" % (total, len(pages)))
+        for page in pages:
+            site = site_of(page)
+            print("      · %-22s 它那边的今天是 %s" % (site, site_today(site, now)))
         return 0
 
     items = flat_items(picked)
@@ -259,14 +297,14 @@ def main():
                       % (type(exc).__name__, str(exc)[:140]))
                 zh = None
 
-    title = "iGaming 行业快讯 · %s" % cn_day(date)
-    payload = card(title, picked, zh, date)
+    title = "iGaming 行业快讯 · %s" % cn_day(today_cn)
+    payload = card(title, picked, zh)
 
-    print("▶ 抓取: %d 条 / %d 个来源（%s）" % (total, len(pages), date))
-    print("▶ 当日快讯: %d 条 / %d 个来源 · 窗口=%s · 标题=%s"
+    print("▶ 抓取: %d 条 / %d 个来源（jsonl 日期 %s）" % (total, len(pages), date))
+    print("▶ 当日快讯: %d 条 / %d 个来源 · 窗口=%s · 抬头日期=%s（中国）"
           % (len(items), len(picked),
-             ("当日" if not a.lookback else "最近 %d 天" % a.lookback),
-             ("中文（%s）" % engine_name) if zh else "英文原文"))
+             ("各站当地当天" if not a.lookback else "各站当地近 %d 天" % a.lookback),
+             today_cn))
     print("\n===== 卡片预览 =====")
     print("[标题] " + title)
     for el in payload["card"]["elements"]:
