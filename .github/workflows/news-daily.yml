@@ -4,13 +4,13 @@
 # 默认**只落盘**：日报进 Actions artifact + 贴进 Run 页面摘要，不推任何群 / 邮件。
 # 想推送：把 LARK_WEBHOOK（可选 LARK_SECRET）加进 Secrets，再把文末「可选推送」的 if 改成 true。
 #
-# 时区：cron 用 UTC。04:00 UTC = 09:30 IST（与本机 `intel schedule` 的默认时刻一致）。
+# 时区：cron 用 UTC。01:30 UTC = 09:30 中国（= 07:00 IST）—— 快讯按用户要求固定在早 9:30（中国时间）发。
 name: news-daily
 
 on:
   workflow_dispatch:            # 手动触发（首次验证 / 补跑）
   schedule:
-    - cron: "0 4 * * *"
+    - cron: "30 1 * * *"
     # 注意：GitHub 的 schedule 在高峰期可能延迟、甚至被跳过；仓库连续 60 天无提交活动也会被暂停。
     # 要准时可靠，可以用外部 cron（如 Cloudflare Worker）调 workflow_dispatch 触发。
 
@@ -38,7 +38,12 @@ jobs:
         run: python3 intel news run --out out
 
       - name: 生成每日热点页（静态 HTML，可托到边缘）
-        run: python3 tools/daily_page.py --top 10 --out out/daily.html
+        env:
+          # 云端没有本机 CLI → 分析走 GPT（OpenAI 兼容端点，已在 config.toml [collab] 配好并同步进 Secrets）
+          OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
+        run: python3 tools/daily_page.py --analyze --out out/daily.html
 
       - name: 推到边缘 KV（凭据齐全才发；缺凭据自动 dry-run）
         env:
@@ -50,12 +55,24 @@ jobs:
           python3 tools/kv_put.py out/daily.html "daily:$(date -u +%F)"
           python3 tools/kv_put.py out/daily.json daily:json --content-type "application/json; charset=utf-8"
 
-      - name: 推送到 Lark（前 10 条；没配 webhook 时只打印，绝不误发）
+      - name: 推送到 Lark（前 10 条英文卡片；默认只打印）
         env:
           LARK_WEBHOOK: ${{ secrets.LARK_WEBHOOK }}
           LARK_SECRET: ${{ secrets.LARK_SECRET }}
           PUBLIC_BASE_URL: ${{ secrets.PUBLIC_BASE_URL }}
-        run: python3 tools/push_top.py --top 10 --send
+        # 2026-10-12：这一步与下面那条「内部群快讯」内容重叠，同一次 run 会发两条卡片，
+        # 所以默认 dry-run（去掉 --send）。要恢复真发：把 run 改回 `--send`。
+        run: python3 tools/push_top.py --top 10
+
+      # 内部通知群快讯：与云腿 KOL 日报（kol-discover）用**同一个**自定义机器人。
+      # 卡片是中文（内部群口吻，与云腿日报一致）→ 必须显式 --allow-cjk；
+      # 对外的 push_top.py 仍是纯英文、走 push.assert_no_cjk，两者不混。
+      # 没配 LARK_WEBHOOK 时脚本自己只打印，不会半路静默发送。
+      - name: 发行业快讯到 Lark 内部通知群（各源前 2 条 + 资讯页入口）
+        env:
+          LARK_WEBHOOK: ${{ secrets.LARK_WEBHOOK }}
+          LARK_SECRET: ${{ secrets.LARK_SECRET }}
+        run: python3 tools/news_brief.py --allow-cjk --send
 
       - name: 归档日报（artifact，保留 90 天）
         uses: actions/upload-artifact@v4

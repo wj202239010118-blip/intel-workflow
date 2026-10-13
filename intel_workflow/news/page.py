@@ -20,29 +20,76 @@ import html as html_mod
 import json
 import pathlib
 
-TOP_N = 10
+TOP_N = 10               # 「前 N 条」场合用（Lark 卡片）
+PER_SITE_N = 0           # 页面 / JSON：每个来源列几条；**0 = 不限**（各平台穷举）
 PLACEHOLDER = "<!--CONSOLE_ENTRY-->"
 
+# 页面分区（按分析结果归类）：key → 标题 / 一句话说明
+SECTIONS = (
+    ("hot", "Hot topics", "Regulation, rulings, M&A, market moves — the ones worth acting on."),
+    ("positive", "Positive", "Reads as favourable for operators / affiliates."),
+    ("negative", "Negative", "Reads as a headwind."),
+    ("mixed", "Other", "Product, people and everything else."),
+)
+
 STYLE = """
-:root{--fg:#15181d;--muted:#5c6673;--line:#e3e6ea;--bg:#f7f8fa;--card:#fff;--link:#14538c}
+:root{--fg:#14171c;--muted:#5f6a77;--line:#e4e8ed;--soft:#f4f6f8;--card:#fff;--link:#0b62c4;
+--brand:#0f1b2d;--hot:#e8842c;--pos:#2f9e5e;--neg:#d1495b}
 *{box-sizing:border-box}
-body{margin:0;font:16px/1.62 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-color:var(--fg);background:var(--bg)}
-header{background:var(--card);border-bottom:1px solid var(--line);padding:28px 20px}
-.wrap{max-width:760px;margin:0 auto}
-h1{margin:0;font-size:26px;letter-spacing:-.2px}
-.sub{margin:6px 0 0;color:var(--muted);font-size:14px}
-main{padding:24px 20px 8px}
-article{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:0 0 12px}
-article h2{margin:0;font-size:17px;line-height:1.4}
-article h2 a{color:var(--link);text-decoration:none}
-article h2 a:hover{text-decoration:underline}
-.meta{margin:6px 0 0;color:var(--muted);font-size:12.5px}
-.sum{margin:8px 0 0;color:#39414c;font-size:14.5px}
-footer{padding:8px 20px 40px;color:var(--muted);font-size:12.5px}
+body{margin:0;font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+color:var(--fg);background:var(--soft)}
+.wrap{max-width:1080px;margin:0 auto;padding:0 20px}
+.topbar{background:var(--brand);color:#fff}
+.topbar .wrap{display:flex;align-items:baseline;gap:12px;padding:15px 20px}
+.brand{font-size:20px;font-weight:700;letter-spacing:-.2px}
+.date{color:#9fb0c6;font-size:13px}
+.arch{margin-left:auto;font-size:13px}
+.arch a{color:#cdd9e8;text-decoration:none}
+.arch a:hover{text-decoration:underline}
+.tabs{background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:9}
+.tabs .wrap{display:flex;gap:2px;overflow-x:auto;padding:0 20px}
+.tab{border:0;background:none;font:inherit;font-weight:600;color:var(--muted);padding:13px 15px;cursor:pointer;
+border-bottom:2px solid transparent;white-space:nowrap}
+.tab:hover{color:var(--fg)}
+.tab.is-on{color:var(--brand);border-bottom-color:var(--brand)}
+.tab .n{color:#98a2b3;font-weight:500;margin-left:5px}
+main{padding:22px 20px 64px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px}
+article{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--line);
+border-radius:10px;padding:14px 16px}
+article.hot{border-left-color:var(--hot)}
+article.positive{border-left-color:var(--pos)}
+article.negative{border-left-color:var(--neg)}
+article h3{margin:0;font-size:16px;line-height:1.35}
+article h3 a{color:var(--link);text-decoration:none}
+article h3 a:hover{text-decoration:underline}
+.meta{margin:6px 0 0;color:var(--muted);font-size:12px}
+.why{margin:9px 0 0;color:#1d3f6e;font-size:13.5px}
+.sum{margin:9px 0 0;color:#3c4653;font-size:13.5px}
+.sec{margin:0 0 14px;color:var(--muted);font-size:13px}
+.sec b{color:var(--fg)}
+.th{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:0 0 12px}
+.th b{font-size:12.5px;letter-spacing:.5px;text-transform:uppercase;color:var(--muted)}
+.th p{margin:6px 0 0;font-size:14.5px;color:#2c333c}
+footer{color:var(--muted);font-size:12.5px;padding:0 20px 40px}
 footer .wrap{border-top:1px solid var(--line);padding-top:14px}
-.arch{margin:0 0 18px;font-size:13.5px;color:var(--muted)}
-.arch a{color:var(--link)}
+@media (max-width:560px){.brand{font-size:18px}.tab{padding:12px 11px;font-size:14px}}
+"""
+
+# tab 切换：纯前端，无依赖。支持 `#hot` 这种深链接，刷新后仍停在同一个 tab。
+SCRIPT = """
+(function(){
+  var tabs=[].slice.call(document.querySelectorAll('.tab')),
+      panels=[].slice.call(document.querySelectorAll('.panel'));
+  function pick(id,push){
+    tabs.forEach(function(t){t.classList.toggle('is-on',t.dataset.t===id);});
+    panels.forEach(function(p){p.hidden=(p.id!=='p-'+id);});
+    if(push&&location.hash!=='#'+id){try{history.replaceState(null,'','#'+id);}catch(e){}}
+  }
+  tabs.forEach(function(t){t.onclick=function(){pick(t.dataset.t,true);window.scrollTo(0,0);};});
+  var want=(location.hash||'').replace('#','');
+  if(want&&document.getElementById('p-'+want)) pick(want,false);
+})();
 """
 
 
@@ -97,47 +144,139 @@ def _all_items(pages):
     return dated + undated
 
 
-def as_json(pages, date=None, top_n=TOP_N):
-    """同一批条目的机读版（界面侧 fetch 用，与页面数据同源）。"""
+def collect(pages, per_site=PER_SITE_N):
+    """**按来源汇总**：每个站取站内前 `per_site` 条，站与站顺序拼接（站内新→旧）。
+
+    2026-10-12：页面从「各站摊平后全局取前 10 条」改成「按来源分区列出」——
+    原先的取法实测 10 条里 9 条来自同一个站（那个站的 feed 时间戳整体最新，把前 N 名包圆），
+    而走 sitemap、没有 ts 的站永远一条也进不来。四个平台的资讯都该露面。
+    """
+    out = []
+    for page in pages:
+        rows = _all_items([page])
+        out.extend(rows[:per_site] if per_site and per_site > 0 else rows)
+    return out
+
+
+def pick_items(pages, top_n=TOP_N):
+    """跨站**轮流取** `top_n` 条（站内仍新→旧）—— 给「必须短」的场合（Lark 卡片）用。
+
+    与 `collect()` 的区别：那个是"每站都列出来"（页面/JSON），这个是"总数固定、尽量多元"。
+    """
+    groups = [g for g in (_all_items([p]) for p in pages) if g]
+    out = []
+    round_no = 0
+    while len(out) < top_n and any(len(g) > round_no for g in groups):
+        for group in groups:
+            if len(out) >= top_n:
+                break
+            if len(group) > round_no:
+                out.append(group[round_no])
+        round_no += 1
+    return out
+
+
+def as_json(pages, date=None, per_site=PER_SITE_N, analysis=None):
+    """同一批条目的机读版（界面侧 fetch 用，与页面**同源同序**）。
+
+    `analysis` 有值时附带 sentiment / kind / why；条目数对不上就忽略（宁缺毋错位）。
+    """
     date = date or dt.date.today().isoformat()
+    rows = collect(pages, per_site)
+    if analysis and len(analysis.get("items") or []) == len(rows):
+        for row, item in zip(rows, analysis["items"]):
+            row["sentiment"] = item.get("sentiment") or "mixed"
+            row["kind"] = item.get("kind") or "routine"
+            row["why"] = item.get("why") or ""
     return {
         "date": date,
+        "themes": (analysis or {}).get("themes") or [],
         "items": [
             {"rank": idx, "title": row["title"], "url": row["url"],
-             "summary": row["summary"], "site": row["site"], "time": row["time"]}
-            for idx, row in enumerate(_all_items(pages)[:top_n], 1)
+             "summary": row["summary"], "site": row["site"], "time": row["time"],
+             "sentiment": row.get("sentiment", ""), "kind": row.get("kind", ""),
+             "why": row.get("why", "")}
+            for idx, row in enumerate(rows, 1)
         ],
     }
 
 
-def render(pages, date=None, top_n=TOP_N, site_name="iGaming Daily"):
-    """生成页面 HTML（英文）。`<!--CONSOLE_ENTRY-->` 留给托管方按需注入。"""
+def _card(row, idx, esc):
+    """一条新闻 → 一张卡片：标题 / 来源·时间 / 一句分析 / 原始摘要。
+
+    左侧色条按归类上色（hot 橙 / positive 绿 / negative 红）—— 热点区里也能一眼看出正负。
+    """
+    title = esc(row["title"])
+    if row["url"]:
+        head = f'<a href="{esc(row["url"])}" target="_blank" rel="noopener nofollow">{title}</a>'
+    else:
+        head = title
+    meta = " · ".join(esc(x) for x in (row["site"], row["time"]) if x)
+    why = f'<p class="why">{esc(row["why"])}</p>' if row.get("why") else ""
+    summary = f'<p class="sum">{esc(row["summary"])}</p>' if row["summary"] else ""
+    cls = "hot" if row.get("kind") == "hot" else (row.get("sentiment") or "")
+    # id = 全局序号：推送里可以直接 `#3` 定位到第 3 条
+    return ('<article id="%d" class="%s"><h3>%s</h3><p class="meta">%s</p>%s%s</article>'
+            % (idx, cls, head, meta, why, summary))
+
+
+def render(pages, date=None, per_site=PER_SITE_N, site_name="iGaming Daily", analysis=None):
+    """生成页面 HTML（英文）。**横向 tab 切换分类**：Overview / Hot topics / Positive / Negative / Other。
+
+    `analysis` = `analyze.analyze()` 的结果（每条 sentiment/kind/why + themes）。
+    缺失、或条目数对不上 → 退化成不带分类的完整列表（**宁可没有分类，也不允许错位**）。
+    `<!--CONSOLE_ENTRY-->` 留给托管方按需注入。
+    """
     date = date or dt.date.today().isoformat()
     try:
         pretty = dt.date.fromisoformat(date).strftime("%d %b %Y")
     except Exception:
         pretty = date
-    items = _all_items(pages)[:top_n]
     esc = lambda value: html_mod.escape(_plain(value))          # noqa: E731
 
-    blocks = []
-    for idx, row in enumerate(items, 1):
-        title = esc(row["title"])
-        if row["url"]:
-            head = f'<a href="{esc(row["url"])}" target="_blank" rel="noopener nofollow">{title}</a>'
-        else:
-            head = title
-        meta_bits = [esc(row["site"])]
-        if row["time"]:
-            meta_bits.append(esc(row["time"]))
-        summary = f'<p class="sum">{esc(row["summary"])}</p>' if row["summary"] else ""
-        # id = 序号：推送里可以直接 `#3` 定位到第 3 条
-        blocks.append(
-            '<article id="%d"><h2>%s</h2><p class="meta">%s</p>%s</article>'
-            % (idx, head, " · ".join(meta_bits), summary)
+    rows = collect(pages, per_site)
+    if analysis and len(analysis.get("items") or []) == len(rows):
+        for row, item in zip(rows, analysis["items"]):
+            row["sentiment"] = item.get("sentiment") or "mixed"
+            row["kind"] = item.get("kind") or "routine"
+            row["why"] = item.get("why") or ""
+
+    buckets = {key: [] for key, _, _ in SECTIONS}
+    for row in rows:
+        key = "hot" if row.get("kind") == "hot" else (row.get("sentiment") or "mixed")
+        buckets.setdefault(key, buckets["mixed"]).append(row)
+
+    sources = ", ".join(sorted({r["site"] for r in rows if r["site"]}))
+
+    # Overview（主题解读）作为第一个 tab
+    themes = (analysis or {}).get("themes") or []
+    if themes:
+        overview = "".join('<div class="th"><b>%s</b><p>%s</p></div>'
+                           % (esc(t.get("name")), esc(t.get("summary"))) for t in themes)
+    else:
+        overview = '<div class="th"><b>Sources</b><p>%s</p></div>' % esc(sources)
+    tabs = ['<button class="tab is-on" data-t="overview">Overview</button>']
+    panels = ['<section id="p-overview" class="panel">\n%s\n</section>' % overview]
+
+    idx = 0
+    for key, heading, blurb in SECTIONS:
+        group = buckets.get(key) or []
+        tabs.append('<button class="tab" data-t="%s">%s<span class="n">%d</span></button>'
+                    % (key, esc(heading), len(group)))
+        cards = []
+        for row in group:
+            idx += 1
+            cards.append(_card(row, idx, esc))
+        grid = "\n".join(cards) if cards else '<p class="sec">Nothing in this bucket today.</p>'
+        panels.append(
+            '<section id="p-%s" class="panel" hidden>\n'
+            '<p class="sec"><b>%s</b> — %s · %d items · %s</p>\n<div class="grid">\n%s\n</div>\n</section>'
+            % (key, esc(heading), esc(blurb), len(group), esc(sources), grid)
         )
 
-    body = "\n".join(blocks) or "<p>No headlines for this date.</p>"
+    if not rows:
+        panels.append('<section class="panel"><p>No headlines for this date.</p></section>')
+
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -149,18 +288,20 @@ def render(pages, date=None, top_n=TOP_N, site_name="iGaming Daily"):
 <style>{STYLE}</style>
 </head>
 <body>
-<header><div class="wrap">
-<h1>{esc(site_name)}</h1>
-<p class="sub">Industry headlines · {esc(pretty)}</p>
-</div></header>
-<main><div class="wrap">
-<p class="arch">Also available: <a href="/d/{esc(date)}">this day's page</a></p>
-{body}
+<div class="topbar"><div class="wrap">
+<span class="brand">{esc(site_name)}</span>
+<span class="date">{esc(pretty)}</span>
+<span class="arch"><a href="/d/{esc(date)}">this day's page</a></span>
+</div></div>
+<nav class="tabs"><div class="wrap">{"".join(tabs)}</div></nav>
+<main class="wrap">
+{chr(10).join(panels)}
 {PLACEHOLDER}
-</div></main>
+</main>
 <footer><div class="wrap">
 <p>Aggregated from publicly available industry news feeds. Links open the original publishers.</p>
 </div></footer>
+<script>{SCRIPT}</script>
 </body>
 </html>
 """

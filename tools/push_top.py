@@ -75,7 +75,7 @@ def main():
         print(f"⚠️  {args.outdir}/ 里没有 {date} 的抓取结果（先跑 intel news run）")
         return 1
 
-    items = news_page._all_items(pages)[:args.top]
+    items = news_page.pick_items(pages, args.top)
     title = f"iGaming Daily — {date}"
     body = build_message(items, args.base, date)
     news_push.assert_no_cjk(title + "\n" + body)          # 外发禁中文（硬校验）
