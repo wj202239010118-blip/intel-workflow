@@ -4,8 +4,11 @@
 # 默认**只落盘**：日报进 Actions artifact + 贴进 Run 页面摘要，不推任何群 / 邮件。
 # 想推送：把 LARK_WEBHOOK（可选 LARK_SECRET）加进 Secrets，再把文末「可选推送」的 if 改成 true。
 #
-# 定时：由 Cloudflare Worker kol-ext-gateway 的 Durable Object alarm，每天 01:30 UTC
-# （= 中国 09:30 / 07:00 IST）调这里的 workflow_dispatch 触发。
+# 定时：由 Cloudflare Worker kol-ext-gateway 的 Durable Object alarm，每天 16:00 UTC
+# （= 中国次日 00:00）调这里的 workflow_dispatch 触发。
+# 为什么不是早上：四个站都是欧美行业媒体，UTC 01:30（中国 09:30）时伦敦才 02:30、
+# 布宜诺斯艾利斯还在前一日 22:30 —— 当天稿一条都还没发（2026-10-13 实测：
+# 伦敦当天稿 07:18–15:09 UTC 发、阿根廷 12:13–16:37 -03:00 发，故取 UTC 16:00）。
 # 不用 GitHub 自带的 schedule —— 它高峰期会延迟、甚至跳过（2026-10-13 实测该跑的点没触发），
 # 而且与 Worker 入口并存会导致同一天往群里发两条快讯。
 name: news-daily
