@@ -19,6 +19,7 @@ import datetime as dt
 import html as html_mod
 import json
 import pathlib
+from zoneinfo import ZoneInfo
 
 TOP_N = 10               # 「前 N 条」场合用（Lark 卡片）
 PER_SITE_N = 0           # 页面 / JSON：每个来源列几条；**0 = 不限**（各平台穷举）
@@ -123,6 +124,25 @@ def load_latest(outdir, date=None):
     return list(latest.values())
 
 
+# 页面/JSON 上的日期一律**中国时间**（读的人在中国）：欧美站的稿子换算过来常常已跨日
+# —— 例如 sbcnews 的 12 Oct 15:09 UTC → 中国 12 Oct 23:09（同日），
+#    而 yogonet 的 12 Oct 20:00 -03:00 → 中国 13 Oct 07:00（跨日）。
+CN_TZ = ZoneInfo("Asia/Shanghai")
+
+
+def _cn_date(ts, fallback=""):
+    """条目的发布时刻（带时区的 ts）→ 中国日期 'dd Mon YYYY'；换算不了就退回原文日期。"""
+    if not ts:
+        return fallback
+    try:
+        moment = dt.datetime.fromisoformat(str(ts))
+    except Exception:  # noqa: BLE001  —— 抓取端的 ts 格式不可控，解不动就用原文
+        return fallback
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=dt.timezone.utc)
+    return moment.astimezone(CN_TZ).strftime("%d %b %Y")
+
+
 def _all_items(pages):
     """跨站摊平：带 ts 的按时间倒序排前面，没 ts 的维持原相对顺序跟在后面。"""
     dated, undated = [], []
@@ -139,6 +159,8 @@ def _all_items(pages):
                 "site_key": page.get("platform") or "",
                 "pos": pos,
             }
+            # 显示用的日期：来源站发布时刻 → 中国日期（没有 ts 的站点退回原文日期）
+            row["date_cn"] = _cn_date(row["ts"], row["time"])
             (dated if row["ts"] else undated).append(row)
     dated.sort(key=lambda r: r["ts"], reverse=True)
     return dated + undated
@@ -194,6 +216,7 @@ def as_json(pages, date=None, per_site=PER_SITE_N, analysis=None):
         "items": [
             {"rank": idx, "title": row["title"], "url": row["url"],
              "summary": row["summary"], "site": row["site"], "time": row["time"],
+             "date_cn": row.get("date_cn", ""),
              "sentiment": row.get("sentiment", ""), "kind": row.get("kind", ""),
              "why": row.get("why", "")}
             for idx, row in enumerate(rows, 1)
@@ -211,7 +234,7 @@ def _card(row, idx, esc):
         head = f'<a href="{esc(row["url"])}" target="_blank" rel="noopener nofollow">{title}</a>'
     else:
         head = title
-    meta = " · ".join(esc(x) for x in (row["site"], row["time"]) if x)
+    meta = " · ".join(esc(x) for x in (row["site"], row.get("date_cn") or row["time"]) if x)
     why = f'<p class="why">{esc(row["why"])}</p>' if row.get("why") else ""
     summary = f'<p class="sum">{esc(row["summary"])}</p>' if row["summary"] else ""
     cls = "hot" if row.get("kind") == "hot" else (row.get("sentiment") or "")
