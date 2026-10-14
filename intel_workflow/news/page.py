@@ -374,8 +374,14 @@ SCRIPT = """
     function cur(){ return Math.round(track.scrollLeft/Math.max(1,track.clientWidth)); }
     function mark(){ var k=i%n; [].forEach.call(dots.children,function(b,j){ b.className=(j===k)?'on':''; }); }
     function restart(){ if(timer) clearInterval(timer); timer=setInterval(step,6000); }
+    /* 单向循环的"跳回"必须是瞬时的。坑：CSS 里 .hero-track 是 scroll-behavior:smooth，
+       而 scrollTo({behavior:'auto'}) 的 auto 意思是「沿用 CSS 的值」→ 会变成右滑回去。
+       所以跳回时把 CSS 也临时置为 auto，下一帧再恢复。 */
     function goto(k,smooth){
-      track.scrollTo({left:track.clientWidth*k,behavior:smooth?'smooth':'auto'});
+      if(smooth){ track.scrollTo({left:track.clientWidth*k,behavior:'smooth'}); return; }
+      track.style.scrollBehavior='auto';
+      track.scrollTo({left:track.clientWidth*k,behavior:'auto'});
+      requestAnimationFrame(function(){ track.style.scrollBehavior=''; });
     }
     function step(){                            /* 永远 +1：只朝左走 */
       if(busy) return;
