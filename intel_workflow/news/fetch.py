@@ -185,6 +185,9 @@ def _fill_images_via_browser(site, items, cap=4, headless=True, profile=None):
     if not todo or not node.node_available():
         return items
     for it in todo:
+        # 先等够闸门要求的同域间隔再问闸门 —— 调用这条腿之前刚抓过同一个域的 feed，
+        # 直接 check 会因为还在冷却里被拒，结果一张图都补不到（2026-10-14 云端实测踩到）。
+        _wait_min_interval(http)
         allowed, _why = http.gate.check(site.domain)
         if not allowed:
             break                                  # 撞到闸门别硬来：剩下的留到下一天
