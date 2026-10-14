@@ -332,33 +332,53 @@ SCRIPT = """
       +'<a class="t" href="'+esc(it.url)+'" target="_blank" rel="noopener nofollow">'+esc(it.title)+'</a>'
       +'<span class="d">'+esc(it.date_cn||'')+'</span></div></li>';
   }
-  /* 轮播交互：圆点 + 6 秒自动播放 + 手动滑动同步。n<2 时不显示控件。 */
+  /* 轮播交互：**单向循环**（一直向左滑）+ 圆点 + 6 秒自动播放。
+     单向的做法：末尾克隆第 1 张，滑到克隆后再无动画跳回真第 1 张 —— 视觉上永远朝同一方向，
+     不会出现"到尾巴又倒着滑回去"。n<2 时不显示控件。 */
   function initCarousel(){
     var track=document.querySelector('.hero-track'), dots=document.querySelector('.hero-dots');
     if(!track||!dots) return;
+    var old=track.querySelector('[data-loop-clone]');
+    if(old) old.remove();                       /* 重建后重复调用时别叠克隆 */
     var n=track.children.length;
     if(n<2) return;
+    var clone=track.children[0].cloneNode(true);
+    clone.setAttribute('data-loop-clone','1');
+    clone.setAttribute('aria-hidden','true');
+    track.appendChild(clone);                   /* 末尾多一张 = 第 1 张的替身 */
+
     dots.style.display='flex';
     dots.innerHTML='';
-    var i=0, timer=null;
-    function mark(){ [].forEach.call(dots.children,function(b,j){ b.className=(j===i)?'on':''; }); }
-    function restart(){ if(timer) clearInterval(timer); timer=setInterval(function(){ go(i+1,false); },6000); }
-    function go(k,fromUser){
-      i=((k%n)+n)%n;
-      track.scrollTo({left:track.clientWidth*i,behavior:'smooth'});
-      mark();
-      if(fromUser) restart();
+    var i=0, timer=null, busy=false;
+    function cur(){ return Math.round(track.scrollLeft/Math.max(1,track.clientWidth)); }
+    function mark(){ var k=i%n; [].forEach.call(dots.children,function(b,j){ b.className=(j===k)?'on':''; }); }
+    function restart(){ if(timer) clearInterval(timer); timer=setInterval(step,6000); }
+    function goto(k,smooth){
+      track.scrollTo({left:track.clientWidth*k,behavior:smooth?'smooth':'auto'});
+    }
+    function step(){                            /* 永远 +1：只朝左走 */
+      if(busy) return;
+      busy=true;
+      var next=i+1;
+      goto(next,true);
+      setTimeout(function(){                    /* 等滑动动画走完再决定要不要跳回开头 */
+        busy=false;
+        if(next>=n){ goto(0,false); i=0; }      /* 滑到克隆了 → 无声跳回真第 1 张 */
+        else { i=next; }
+        mark();
+      },620);
     }
     for(var j=0;j<n;j++){ (function(j){
       var b=document.createElement('button');
       b.type='button';
-      b.onclick=function(){ go(j,true); };
+      b.onclick=function(){ busy=false; i=j; goto(j,true); mark(); restart(); };
       dots.appendChild(b);
     })(j); }
     mark();
     track.addEventListener('scroll',function(){
-      var k=Math.round(track.scrollLeft/Math.max(1,track.clientWidth));
-      if(k!==i){ i=k; mark(); }
+      var k=cur();
+      if(k>=n){ i=0; mark(); return; }          /* 手动滑到克隆：按第 1 张高亮 */
+      if(k!==i && !busy){ i=k; mark(); }
     });
     restart();
   }
