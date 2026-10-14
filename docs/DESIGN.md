@@ -161,6 +161,13 @@ sbcnews / igamingbusiness / yogonet 走 RSS；igaming.news 只有 sitemap（`/fe
 同事端零组件依赖。正确顺序始终是**先找机器接口（RSS/Atom/sitemap/API）→ 再考虑浏览器**，
 而不是死磕无头参数。
 
+**配图腿（2026-10-14，已关）**：sbcnews 整站对普通 HTTP 一律 403，图放在独立子域
+`resources.sbcnews.co.uk`（只放行图片扩展名；目录 / S3 列表 API 全 403；文件名又不是文章 slug，
+按 slug 拼 404），唯一出口是文章页的 `og:image` —— 只能由浏览器读一次。云端（GitHub runner =
+数据中心 IP）无头过不了 Cloudflare 挑战页（实测返回 `403 "Just a moment..."`），故**云端不再尝试补图**，
+sbcnews 那几条走无图占位（其余三站照常有图）。本机有头浏览器能过；要让本机补，把 `config.toml` 的
+`[news.browser_og]` 打开即可（那条腿的代码保留，云端工作流里 node + playwright 两步已去掉）。
+
 **并发与健康**：整轮抓取持 `~/.cache/intel-workflow/browser-profile/.lock`（`fcntl.flock` 非阻塞）；
 拿不到就跳过本轮（幂等，下次补上），避免定时任务与手动跑撞 profile 时两边一起挂。
 `digest.scan()` 记录各站最近一次条目数，跌破上次 40%（且 <3）时在日报顶部输出英文告警行。
