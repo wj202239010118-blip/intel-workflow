@@ -1,0 +1,33 @@
+# 临时：只验证 sbcnews 的浏览器补图腿（验证完即删）
+name: sbc-og-test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  t:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: 装 playwright
+        run: |
+          npm i playwright --no-save --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: 抓取（sbcnews 那条腿会走浏览器读 og:image）
+        run: python3 intel news run --out out
+      - name: 看 sbcnews 补到几张图
+        run: |
+          F=$(ls out/*sbcnews*.jsonl | tail -1)
+          echo "产物：$F"
+          echo "带图条目: $(grep -o '"image": "https://[^"]*"' "$F" | wc -l)"
+          grep -o '"image": "https://[^"]*"' "$F" | head -4 || echo "（一张都没补到）"
