@@ -20,6 +20,7 @@ import datetime as dt
 import html as html_mod
 import json
 import pathlib
+import re
 from zoneinfo import ZoneInfo
 
 TOP_N = 10               # 「前 N 条」场合用（Lark 卡片）
@@ -232,6 +233,17 @@ cursor:pointer;transition:width .2s ease,background .2s ease}
 #ranked{padding-top:0;border-top:0}
 .rank{display:inline-block;min-width:26px;margin-right:6px;padding:1px 6px;border-radius:6px;
 font-size:10.5px;font-weight:800;letter-spacing:.2px;vertical-align:middle;color:#fff;background:var(--or)}
+
+/* ⑨ 分类索引（用户 2026-10-14）：头条下方一排分类按钮，点了跳到对应分类块。
+   原生锚点，不依赖 JS；`scroll-margin-top` 让跳过去时不被吸顶的 masthead 盖住。 */
+.catnav{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 18px}
+.catnav a{display:inline-flex;align-items:center;gap:6px;padding:7px 13px;border:1px solid var(--line);
+border-radius:999px;background:#fff;font-size:12.5px;font-weight:700;color:var(--fg);text-decoration:none;
+white-space:nowrap;transition:background .15s ease,border-color .15s ease,color .15s ease}
+.catnav a:hover{border-color:var(--or);color:var(--or)}
+.catnav a .n{font-size:11.5px;font-weight:600;color:var(--dim)}
+.catnav a:hover .n{color:var(--or)}
+.cat-block{scroll-margin-top:84px}
 """
 
 # tab 切换：纯前端，无依赖。支持 `#hot` 这种深链接，刷新后仍停在同一个 tab。
@@ -300,10 +312,19 @@ SCRIPT = """
     if(picks.length<3){ for(i=0;i<items.length&&picks.length<3;i++){ if(picks.indexOf(items[i])<0) picks.push(items[i]); } }
     return picks.slice(0,4);
   }
+  /* 类别名 → 锚点 id；与 Python 侧 _slug 同一套规则（分类索引要跳对 id） */
+  function slug(name){ return 'cat-'+String(name||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''); }
   function catSection(name,items){
-    return '<section class="cat-block" data-cat="'+esc(name)+'">'
+    return '<section class="cat-block" id="'+slug(name)+'" data-cat="'+esc(name)+'">'
       +'<div class="sec-h"><em>'+items.length+' items</em><h2>'+esc(name)+'</h2></div>'
       +'<ul class="feed-list">'+items.map(feedRow).join('')+'</ul></section>';
+  }
+  /* 分类索引：头条（轮播）下面一排按钮，点一个跳到对应分类块（原生锚点） */
+  function catNav(order,groups){
+    if(!order||order.length<2) return '';
+    return '<nav class="catnav" aria-label="Sections">'+order.map(function(g){
+      return '<a href="#'+slug(g)+'">'+esc(g)+'<span class="n">'+groups[g].length+'</span></a>';
+    }).join('')+'</nav>';
   }
   function card(it,i){
     var media=it.image
@@ -400,7 +421,7 @@ SCRIPT = """
     /* 类别之间按条数多少排（内容多的类别说明当下更热），与 SSR 一致 */
     order.sort(function(a,b){ return groups[b].length-groups[a].length || a.localeCompare(b); });
     var cats=order.map(function(g){ return catSection(g,groups[g]); }).join('');
-    box.innerHTML='<span class="live-pill"><i></i>Live iGaming News</span>'+car;
+    box.innerHTML='<span class="live-pill"><i></i>Live iGaming News</span>'+car+catNav(order,groups);
     /* 类别块是另一个容器：中间夹着 Top ranked（前端不碰它，榜单一天才变一次） */
     var catsBox=document.getElementById('cats');
     if(catsBox) catsBox.innerHTML=cats;
@@ -707,17 +728,26 @@ def _feed_row(row, esc, badge=""):
                esc(row["title"]), why, esc(row.get("date_cn") or row.get("time") or "")))
 
 
+def _slug(name):
+    """类别名 → 锚点 id（`Casino & Slots` → `cat-casino-slots`）。
+
+    前端 JS 里有一份**同样规则**的实现（分类索引导航要跳到同样的 id 才对得上）。
+    """
+    return "cat-" + re.sub(r"[^a-z0-9]+", "-", (name or "").lower()).strip("-")
+
+
 def _cat_section(name, items, esc):
     """一个类别块：段头（类别名 + 条数）+ 该类的**全部条目（统一紧凑行）**。
 
     「同一个级别的新闻聚在一起」—— 头条级已经进了上面的轮播，这里就都是同一档，
     所以不再区分大卡/小卡（同一类里混着大小卡，反而像有层级差）。类别内按时间倒序，
-    类别之间按条数多少排。
+    类别之间按条数多少排。块本身带锚点 id，供头条下方的分类索引跳转。
     """
     head = ('<div class="sec-h"><em>%d items</em><h2>%s</h2></div>' % (len(items), esc(name)))
     rows = "".join(_feed_row(r, esc) for r in items)
-    return ('<section class="cat-block" data-cat="%s">%s<ul class="feed-list">%s</ul></section>'
-            % (esc(name), head, rows))
+    return ('<section class="cat-block" id="%s" data-cat="%s">%s'
+            '<ul class="feed-list">%s</ul></section>'
+            % (_slug(name), esc(name), head, rows))
 
 
 def _ranked_section(rows, esc):
@@ -831,15 +861,24 @@ def render(pages, date=None, per_site=PER_SITE_N, site_name="iGaming Daily", ana
     ordered_cats = sorted(by_cat.items(), key=lambda kv: (-len(kv[1]), kv[0]))
     cats_html = "".join(_cat_section(name, items, esc) for name, items in ordered_cats)
 
-    # 顺序（用户 2026-10-14）：**轮播头条在最上** → Top ranked → 类别块。
-    # `#live`（轮播）与 `#cats`（类别块）是实时刷新会重建的两块；`#ranked` 夹在中间、
+    # 分类索引（用户 2026-10-14）：头条（轮播）下面一排按钮，点一个跳到对应分类块。
+    # 用原生锚点（href="#cat-xxx"）→ 不依赖 JS；id 走 _slug，和类别块的 id 一致。
+    catnav = ""
+    if len(ordered_cats) > 1:
+        catnav = ('<nav class="catnav" aria-label="Sections">%s</nav>'
+                  % "".join('<a href="#%s">%s<span class="n">%d</span></a>'
+                            % (_slug(name), esc(name), len(items))
+                            for name, items in ordered_cats))
+
+    # 顺序（用户 2026-10-14）：**轮播头条在最上** → 分类索引 → Top ranked → 类别块。
+    # `#live`（轮播+索引）与 `#cats`（类别块）是实时刷新会重建的两块；`#ranked` 夹在中间、
     # 不归前端管（榜单一天才变一次）→ 刷新不会把它冲掉，也不会顶到头条上面去。
     main_col = ('<div class="main-col">'
                 '<div id="live"><span class="live-pill"><i></i>Live iGaming News</span>'
-                '%s</div>'
+                '%s%s</div>'
                 '%s'
                 '<div id="cats" class="cats">%s</div></div>'
-                % (carousel, _ranked_section(ranked, esc), cats_html))
+                % (carousel, catnav, _ranked_section(ranked, esc), cats_html))
 
     top = "".join(_topic_item(r, esc) for r in ordered[:4])
     side = ('<aside class="side">'
