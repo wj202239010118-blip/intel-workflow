@@ -205,6 +205,27 @@ font-size:10px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;vert
 .hero-text{padding:0 16px 14px}}
 @media (max-width:560px){.feed-row{grid-template-columns:72px minmax(0,1fr)}
 .feed-row img,.feed-row .noimg{width:72px;height:48px}}
+
+/* ⑥ 轮播（2026-10-14 用户）：把「各家的首页头条」汇总成一块可切换的大图。
+   基础用 CSS scroll-snap —— 没有 JS 也能横向滑动；圆点/自动播放由 JS 增强。 */
+.hero-carousel{position:relative;margin:14px 0 0}
+.hero-track{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scroll-behavior:smooth;
+border-radius:14px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.hero-track::-webkit-scrollbar{display:none}
+.hero-slide{flex:0 0 100%;scroll-snap-align:start;display:block;text-decoration:none;color:inherit}
+.hero-dots{display:none;gap:7px;justify-content:center;margin:11px 0 0}
+.hero-dots button{width:8px;height:8px;padding:0;border:0;border-radius:50%;background:#d7dbe0;
+cursor:pointer;transition:width .2s ease,background .2s ease}
+.hero-dots button.on{width:22px;border-radius:4px;background:var(--or)}
+.hero-dots button:hover{background:#b9bfc7}
+
+/* ⑦ 类别块（聚合平台的核心：同一类消息聚在一起）。段头最左侧的小字改成条数，
+   块与块之间用一条细线分隔；块内是「首条图文卡 + 其余紧凑行」。 */
+.cats{display:flex;flex-direction:column;gap:32px}
+.cat-block{padding-top:22px;border-top:1px solid var(--line)}
+.cat-block:first-child{padding-top:0;border-top:0}
+.cat-block .sec-h{margin-bottom:12px}
+.cat-lead{display:block;margin:0 0 10px;max-width:420px}
 """
 
 # tab 切换：纯前端，无依赖。支持 `#hot` 这种深链接，刷新后仍停在同一个 tab。
@@ -233,13 +254,51 @@ SCRIPT = """
     if(k!=='hot'&&k!=='positive'&&k!=='negative') return '';
     return '<span class="chip chip-'+k+'">'+k.charAt(0).toUpperCase()+k.slice(1)+'</span>';
   }
-  function heroHtml(it){
+  /* 类别归一化：与 Python 侧 CATEGORY_RULES 同一套规则、同一顺序（具体 → 宽泛）。
+     先用站方给的 category 匹配，没命中再用标题兜底 —— 反过来会让标题里的词盖掉站方分类。 */
+  var GROUP_RULES=[
+    ['Events',['event','conference','summit','expo','awards','g2e','sigma','ice barcelona','show']],
+    ['People',['people','appoint','hire','leadership','women in','interview','chief']],
+    ['Regulation & Law',['regulat','law','legal','compliance','legislat','court','policy','ruling','tax']],
+    ['Markets & Entry',['market','entry','expansion','licen','oceania','brazil','brasil','africa','asia','latam','mexico','spain','poland','belgium','netherlands','alberta','zealand']],
+    ['Affiliate & Marketing',['affiliate','marketing','promo','advert','media','sponsor']],
+    ['M&A & Finance',['m&a','merger','acquisition','finance','results','revenue','banking','deal','companies','turnover','ebitda']],
+    ['Product & Tech',['product','tech','platform','innovation','payment','software','digital',' ai ','artificial intelligence']],
+    ['Betting',['betting','sportsbook','odds','sports']],
+    ['Casino & Slots',['casino','slot','poker','land based','bingo','lottery','free-to-play','online gaming']]
+  ];
+  function _matchGroup(text){
+    for(var i=0;i<GROUP_RULES.length;i++){
+      var keys=GROUP_RULES[i][1];
+      for(var j=0;j<keys.length;j++){ if(text.indexOf(keys[j])>=0) return GROUP_RULES[i][0]; }
+    }
+    return '';
+  }
+  function groupOf(it){
+    var byCat=_matchGroup((it.category||'').toLowerCase());
+    if(byCat) return byCat;
+    return _matchGroup((it.title||'').toLowerCase())||'Industry';
+  }
+  function heroSlide(it){
     var img=it.image?'<img src="'+esc(it.image)+'" alt="" referrerpolicy="no-referrer">':'';
     var cat=it.category?'<span class="hero-cat">'+esc(it.category)+'</span>':'';
     var sum=it.summary?'<span class="hero-sum">'+esc(it.summary)+'</span>':'';
-    return '<a class="hero" href="'+esc(it.url)+'" target="_blank" rel="noopener nofollow">'
+    return '<a class="hero-slide" href="'+esc(it.url)+'" target="_blank" rel="noopener nofollow">'
       +'<span class="hero-media">'+img+'<span class="hero-scrim"></span>'
       +'<span class="hero-text">'+cat+'<span class="hero-title">'+esc(it.title)+'</span>'+sum+'</span></span></a>';
+  }
+  /* 轮播内容 = 各平台各取最新一条（≈ 各家首页头条） */
+  function carouselPick(items){
+    var seen={}, picks=[], i;
+    for(i=0;i<items.length;i++){ var k=items[i].site_key||''; if(k&&!seen[k]){ seen[k]=1; picks.push(items[i]); } }
+    if(picks.length<3){ for(i=0;i<items.length&&picks.length<3;i++){ if(picks.indexOf(items[i])<0) picks.push(items[i]); } }
+    return picks.slice(0,4);
+  }
+  function catSection(name,items){
+    var lead=items[0]?'<span class="cat-lead">'+card(items[0],0)+'</span>':'';
+    return '<section class="cat-block" data-cat="'+esc(name)+'">'
+      +'<div class="sec-h"><em>'+items.length+' items</em><h2>'+esc(name)+'</h2></div>'
+      +lead+'<ul class="feed-list">'+items.slice(1).map(feedRow).join('')+'</ul></section>';
   }
   function card(it,i){
     var media=it.image
@@ -268,21 +327,60 @@ SCRIPT = """
       +'<a class="t" href="'+esc(it.url)+'" target="_blank" rel="noopener nofollow">'+esc(it.title)+'</a>'
       +'<span class="d">'+esc(it.date_cn||'')+'</span></div></li>';
   }
+  /* 轮播交互：圆点 + 6 秒自动播放 + 手动滑动同步。n<2 时不显示控件。 */
+  function initCarousel(){
+    var track=document.querySelector('.hero-track'), dots=document.querySelector('.hero-dots');
+    if(!track||!dots) return;
+    var n=track.children.length;
+    if(n<2) return;
+    dots.style.display='flex';
+    dots.innerHTML='';
+    var i=0, timer=null;
+    function mark(){ [].forEach.call(dots.children,function(b,j){ b.className=(j===i)?'on':''; }); }
+    function restart(){ if(timer) clearInterval(timer); timer=setInterval(function(){ go(i+1,false); },6000); }
+    function go(k,fromUser){
+      i=((k%n)+n)%n;
+      track.scrollTo({left:track.clientWidth*i,behavior:'smooth'});
+      mark();
+      if(fromUser) restart();
+    }
+    for(var j=0;j<n;j++){ (function(j){
+      var b=document.createElement('button');
+      b.type='button';
+      b.onclick=function(){ go(j,true); };
+      dots.appendChild(b);
+    })(j); }
+    mark();
+    track.addEventListener('scroll',function(){
+      var k=Math.round(track.scrollLeft/Math.max(1,track.clientWidth));
+      if(k!==i){ i=k; mark(); }
+    });
+    restart();
+  }
   function paint(items){
     var box=document.getElementById('live');
     if(!box) return;
-    var head=null, idx=0, i;
-    for(i=0;i<items.length;i++){ if(items[i].image){head=items[i];idx=i;break;} }
-    if(!head){ head=items[0]; idx=0; }
-    var rest=items.slice(0,idx).concat(items.slice(idx+1));
-    box.innerHTML='<span class="live-pill"><i></i>Live iGaming News</span>'
-      +(head?heroHtml(head):'')
-      +'<div class="featured-row">'+rest.slice(0,3).map(card).join('')+'</div>'
-      +'<h3 class="feed-label">More headlines</h3>'
-      +'<ul class="feed-list">'+rest.slice(3).map(feedRow).join('')+'</ul>';
+    var picks=carouselPick(items);
+    var car=picks.length
+      ? '<div class="hero-carousel"><div class="hero-track">'+picks.map(heroSlide).join('')
+        +'</div><span class="hero-dots"></span></div>'
+      : '';
+    var rest=items.filter(function(x){ return picks.indexOf(x)<0; });
+    var groups={}, order=[];
+    rest.forEach(function(it){
+      var g=groupOf(it);
+      if(!groups[g]){ groups[g]=[]; order.push(g); }
+      groups[g].push(it);
+    });
+    /* 类别之间按条数多少排（内容多的类别说明当下更热），与 SSR 一致 */
+    order.sort(function(a,b){ return groups[b].length-groups[a].length || a.localeCompare(b); });
+    var cats=order.map(function(g){ return catSection(g,groups[g]); }).join('');
+    box.innerHTML='<span class="live-pill"><i></i>Live iGaming News</span>'+car
+      +'<div class="cats">'+cats+'</div>';
     var top=document.querySelector('#top ul');
     if(top) top.innerHTML=items.slice(0,4).map(topic).join('');
     applyFilter();
+    initCarousel();
   }
   function pull(){
     fetch('/live.json?t='+Date.now(),{cache:'no-store'})
@@ -295,6 +393,8 @@ SCRIPT = """
       })
       .catch(function(){});                  /* 拉不到 → 保持 SSR 内容 */
   }
+  /* 服务端已经渲染好轮播 → 先装上圆点/自动播放（这样即使 /live.json 拉不到也能用） */
+  initCarousel();
   pull();
   setInterval(pull, 300000);                 /* 5 分钟一次，与 Worker 的抓取周期对齐 */
 })();
@@ -433,6 +533,51 @@ def as_json(pages, date=None, per_site=PER_SITE_N, analysis=None):
     }
 
 
+# 聚合平台的核心：**同一类消息要聚在一起**（用户 2026-10-14）。可各家的分类词完全不一样
+# （BETTING / Sportsbook / Legal & compliance / GAMBLING LAW / OCEANIA…），所以先把它们
+# 归一到一组统一类别，再按类别成块展示。
+CATEGORY_RULES = (
+    ("Events", ("event", "conference", "summit", "expo", "awards", "g2e", "sigma",
+                "ice barcelona", "show")),
+    ("People", ("people", "appoint", "hire", "leadership", "women in", "interview", "chief")),
+    ("Regulation & Law", ("regulat", "law", "legal", "compliance", "legislat", "court",
+                          "policy", "ruling", "tax")),
+    ("Markets & Entry", ("market", "entry", "expansion", "licen", "oceania", "brazil", "brasil",
+                         "africa", "asia", "latam", "mexico", "spain", "poland", "belgium",
+                         "netherlands", "alberta", "zealand")),
+    ("Affiliate & Marketing", ("affiliate", "marketing", "promo", "advert", "media", "sponsor")),
+    ("M&A & Finance", ("m&a", "merger", "acquisition", "finance", "results", "revenue",
+                       "banking", "deal", "companies", "turnover", "ebitda")),
+    ("Product & Tech", ("product", "tech", "platform", "innovation", "payment", "software",
+                        "digital", " ai ", "artificial intelligence")),
+    ("Betting", ("betting", "sportsbook", "odds", "sports")),
+    ("Casino & Slots", ("casino", "slot", "poker", "land based", "bingo", "lottery",
+                        "free-to-play", "online gaming")),
+)
+FALLBACK_CATEGORY = "Industry"
+
+
+def _group_of(row):
+    """类别归一：**先用来源站自己给的分类**（站方标注最权威），没命中才用标题兜底。
+
+    2026-10-14 修：原先把 category 和 title 拼在一起匹配 → 标题里的词会盖掉站方分类
+    （`OCEANIA` 的稿子因为标题有 "licensing" 被塞进 Regulation & Law，`IGAMING EVENTS`
+    因为含 "gaming" 被塞进 Casino）。所以拆成两轮匹配，且规则顺序按「具体 → 宽泛」排。
+    """
+    cat = (row.get("category") or "").lower()
+    if cat:
+        for name, keys in CATEGORY_RULES:
+            for kw in keys:
+                if kw in cat:
+                    return name
+    low = (row.get("title") or "").lower()
+    for name, keys in CATEGORY_RULES:
+        for kw in keys:
+            if kw in low:
+                return name
+    return FALLBACK_CATEGORY
+
+
 # 站点短名 → 展示名（utility bar / sector bar / 分区段抬头用）
 SITE_LABEL = {
     "igaming": "iGaming.News",
@@ -447,19 +592,39 @@ def _site_label(row):
     return SITE_LABEL.get(key) or row.get("site") or key
 
 
-def _hero(row, esc):
-    """LIVE 大头条：文字叠在图内（省掉「图高＋文字高」的叠加，首屏不再被图吃掉）。"""
+def _hero_slide(row, esc):
+    """轮播里的一张（= 原来那张大头条）：文字叠在图内（省首屏高度）。"""
     if not row:
         return ""
     image = row.get("image") or ""
     img = ('<img src="%s" alt="" referrerpolicy="no-referrer">' % esc(image)) if image else ""
     cat = ('<span class="hero-cat">%s</span>' % esc(row.get("category"))) if row.get("category") else ""
     summary = ('<span class="hero-sum">%s</span>' % esc(row.get("summary"))) if row.get("summary") else ""
-    why = ('<p class="hero-why">%s</p>' % esc(row["why"])) if row.get("why") else ""
-    return ('<a class="hero" href="%s" target="_blank" rel="noopener nofollow">'
+    return ('<a class="hero-slide" href="%s" target="_blank" rel="noopener nofollow">'
             '<span class="hero-media">%s<span class="hero-scrim"></span>'
-            '<span class="hero-text">%s<span class="hero-title">%s</span>%s</span></span></a>%s'
-            % (esc(row["url"]), img, cat, esc(row["title"]), summary, why))
+            '<span class="hero-text">%s<span class="hero-title">%s</span>%s</span></span></a>'
+            % (esc(row["url"]), img, cat, esc(row["title"]), summary))
+
+
+def _carousel_rows(ordered, want=4):
+    """轮播内容 = **各平台各取最新一条**（≈ 各家首页的 hero 头条），汇总到同一块轮播里。
+
+    这正是用户要的「同一个级别的新闻聚集到一起」：头条级进轮播，其余进下面的精选/列表。
+    平台不够时用最新的补足到 want 张。
+    """
+    best = {}
+    for row in ordered:
+        key = row.get("site_key") or ""
+        if key and key not in best:
+            best[key] = row        # ordered 已按时间倒序 → 每个平台的第一条就是它最新的
+    picks = list(best.values())
+    if len(picks) < want:
+        for row in ordered:
+            if row not in picks:
+                picks.append(row)
+            if len(picks) >= want:
+                break
+    return picks[:want]
 
 
 def _topic_item(row, esc):
@@ -511,6 +676,19 @@ def _feed_row(row, esc):
             'rel="noopener nofollow">%s</a></h4>%s</div><time class="d">%s</time></li>'
             % (esc(row.get("site_key") or ""), thumb, cat, esc(row["url"]),
                esc(row["title"]), why, esc(row.get("date_cn") or row.get("time") or "")))
+
+
+def _cat_section(name, items, esc, idx=0):
+    """一个类别块：段头（类别名 + 条数）+ 首条（图文卡）+ 其余（紧凑行）。
+
+    这就是「同一类消息聚在一起」的落地：类别内按时间排，类别之间按条数多少排。
+    """
+    head = ('<div class="sec-h"><em>%d items</em><h2>%s</h2></div>' % (len(items), esc(name)))
+    lead_card = _card(items[0], idx, esc) if items else ""
+    rows = "".join(_feed_row(r, esc) for r in items[1:])
+    return ('<section class="cat-block" data-cat="%s">%s<span class="cat-lead">%s</span>'
+            '<ul class="feed-list">%s</ul></section>'
+            % (esc(name), head, lead_card, rows))
 
 
 def _card(row, idx, esc):
@@ -585,17 +763,27 @@ def render(pages, date=None, per_site=PER_SITE_N, site_name="iGaming Daily", ana
             '<a href="#themes">Themes</a></nav>'
             '<a class="cta" href="#live">Live feed</a></div></header>')
 
-    # 彻底汇总 + 分层（2026-10-14 评审优化）：头条 → 3 张精选（图/why/摘要都留）
-    # → 长尾紧凑列表（只留 why）。页面长度砍掉一大截，右列靠 sticky 跟滚、不再留空白。
-    featured = rest[:3]
-    featured_html = "".join(_card(r, i + 1, esc) for i, r in enumerate(featured))
-    tail_html = "".join(_feed_row(r, esc) for r in rest[3:])
+    # 轮播：各平台各取最新一条（≈ 各家首页的 hero 头条）汇总到同一块大图轮播里，
+    # 剩下的才进精选卡 / 紧凑列表 —— 就是用户要的「同级别的新闻聚到一起」。
+    carousel_rows = _carousel_rows(ordered)
+    slides = "".join(_hero_slide(r, esc) for r in carousel_rows)
+    carousel = ('<div class="hero-carousel"><div class="hero-track">%s</div>'
+                '<span class="hero-dots"></span></div>' % slides) if slides else ""
+
+    used = {id(r) for r in carousel_rows}
+    rest_all = [r for r in ordered if id(r) not in used]
+
+    # 按类别成块（聚合平台的核心：同一类消息聚在一起）。类别内保持时间倒序，
+    # 类别之间按条数多少排 —— 内容多的类别（说明当下更热）自然靠前。
+    by_cat = collections.OrderedDict()
+    for row in rest_all:
+        by_cat.setdefault(_group_of(row), []).append(row)
+    ordered_cats = sorted(by_cat.items(), key=lambda kv: (-len(kv[1]), kv[0]))
+    cats_html = "".join(_cat_section(name, items, esc, i + 1)
+                        for i, (name, items) in enumerate(ordered_cats))
+
     main_col = ('<div id="live"><span class="live-pill"><i></i>Live iGaming News</span>'
-                '%s'
-                '<div class="featured-row">%s</div>'
-                '<h3 class="feed-label">More headlines</h3>'
-                '<ul class="feed-list">%s</ul></div>'
-                % (_hero(lead, esc) if lead else "", featured_html, tail_html))
+                '%s<div class="cats">%s</div></div>' % (carousel, cats_html))
 
     top = "".join(_topic_item(r, esc) for r in ordered[:4])
     side = ('<aside class="side">'
