@@ -82,6 +82,7 @@ def _items_from(parsed, site):
 def fetch_feed(site, http, limit=None):
     """RSS/Atom → Intel。取不到就抛 Degraded，绝不返回空榜糊弄。"""
     try:
+        _wait_min_interval(http)   # 榜单腿可能刚请求过同域 → 先等够间隔再发（云端实测踩到过）
         _status, text = http.get(site.feed, domain=site.domain)
     except RateLimited:
         raise
@@ -227,6 +228,7 @@ def fetch_sitemap(site, http, limit=None):
     """XML sitemap → Intel；是 sitemapindex 就自动跟一层到含 "news" 的子 sitemap。"""
     url = site.sitemap
     try:
+        _wait_min_interval(http)   # 同上：榜单腿可能刚请求过同域
         _status, text = http.get(url, domain=site.domain)
     except RateLimited:
         raise
