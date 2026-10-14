@@ -1,6 +1,8 @@
 # iGaming 行业日报 · 每天自动跑（设备关机也能跑）
 #
-# 取数全程纯 HTTP（RSS / sitemap）—— 不需要 node、不需要 playwright、不需要浏览器。
+# 取数全程纯 HTTP（RSS / sitemap）；**唯一例外**是 sbcnews 的配图：它整站对普通 HTTP 返回 403、
+# 图放在独立子域（resources.sbcnews.co.uk）而文件名无从推导，只能由浏览器读一次文章页的 og:image
+# （每轮 ≤4 篇，只读 URL 不下载图片）→ 那一步要 node + playwright；装了失败也不影响日报（图是增强项）。
 # 默认**只落盘**：日报进 Actions artifact + 贴进 Run 页面摘要，不推任何群 / 邮件。
 # 想推送：把 LARK_WEBHOOK（可选 LARK_SECRET）加进 Secrets，再把文末「可选推送」的 if 改成 true。
 #
@@ -32,6 +34,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      # 只有 sbcnews 那条补图腿需要浏览器。其余三站纯 HTTP，不受影响。
+      # continue-on-error：装不上也只是这几篇没图，绝不能让整条日报挂掉。
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: 装 Playwright（仅 sbcnews 的 og:image 补图用；失败不阻塞）
+        continue-on-error: true
+        run: |
+          npm i playwright --no-save --no-audit --no-fund
+          npx playwright install --with-deps chromium
 
       - name: 离线单测（不联网；抓取前先自检）
         run: python -m unittest discover -s tests

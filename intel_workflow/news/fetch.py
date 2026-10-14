@@ -91,6 +91,9 @@ def fetch_feed(site, http, limit=None):
     items = _items_from(feed_parser.parse(text, limit=limit or site.limit), site)
     if not items:
         raise Degraded(f"{site.key}：feed 有响应但解析不出条目（地址还是 RSS 吗？）")
+    # RSS 常常不带配图（sbcnews 尤其：整站对 HTTP 403，图在独立子域）→ 按站点策略补图。
+    # 只补缺图的、限量、走闸门；补不到也不影响这条通道（图是增强项）。
+    fill_article_images(site, http, items)
     return Intel(
         platform=site.key, kind="news", method="feed",
         source=f"{site.domain} RSS/Atom feed（HTTP，无浏览器）",
@@ -138,6 +141,10 @@ def fill_article_images(site, http, items, cap=15):
     图是**增强项**：单篇抓失败就跳过，绝不让它拖垮整条通道。
     """
     todo = [it for it in items if not (it.metrics or {}).get("image")][:cap]
+    if getattr(site, "browser_og", False):
+        # 整站对 HTTP 一律 403 的站（sbcnews.co.uk）：HTTP 抓文章页只会拿到 403 的挑战页，
+        # 图 URL 只能由真实浏览器读 og:image 得到 → 换一条腿（每轮上限更小，只读不下载）。
+        return _fill_images_via_browser(site, items, cap=4)
     for it in todo:
         # 闸门要求同域两次请求之间留够间隔（默认 15s），而 http.get **不会自己等**：间隔不够
         # 直接抛 RateLimited。原先的 `except Exception: continue` 会把限流一起吞掉 → 15 篇全被
@@ -155,6 +162,60 @@ def fill_article_images(site, http, items, cap=15):
             metrics["image"] = got["image"]
         if got["category"] and not metrics.get("category"):
             metrics["category"] = got["category"]
+        it.metrics = metrics
+    return items
+
+
+def _fill_images_via_browser(site, items, cap=4, headless=True, profile=None):
+    """整站对普通 HTTP 一律 403 的站（sbcnews.co.uk）：用浏览器**只读一次**文章页拿 og:image。
+
+    为什么值得单开一条腿（2026-10-14 实测）：它的图不在主域，而在 resources.sbcnews.co.uk ——
+    Cloudflare 只放行图片扩展名（单张图 200 image/jpeg），目录 / S3 列表 API 一律 403；文件名又不是
+    文章 slug（按 slug 拼是 404）。文章页 HTML 里的 og:image 是唯一出口，而它必须由真实浏览器读
+    （浏览器能跑 JS 过那个挑战）。顺带把 article:section 当分类补上。
+
+    两条硬约束：
+    - **每轮最多 cap 篇（默认 4）**：一次调用 = 一次页面加载 + 可能要等挑战（数秒），比 HTTP 逐篇重得多。
+      所以只喂"最需要图的位置"（调用方已排序）。
+    - **只读 URL、不下载图片**：把图 URL 记下来即可，图片由访客浏览器直接从那个子域加载。
+
+    图是增强项：任何一步失败都只跳过这一篇，绝不拖垮主线。
+    """
+    todo = [it for it in items if not (it.metrics or {}).get("image")][:cap]
+    if not todo or not node.node_available():
+        return items
+    for it in todo:
+        allowed, _why = http.gate.check(site.domain)
+        if not allowed:
+            break                                  # 撞到闸门别硬来：剩下的留到下一天
+        args = [
+            "--og=1", f"--url={it.url}", f"--domain={site.domain}",
+            f"--headless={1 if headless else 0}", "--wait=6000", "--timeout=45000",
+        ]
+        if profile:
+            args.append(f"--profile={profile}")
+        try:
+            _rc, out, err = node.run_node(TOOLS, args, timeout=180)
+        except Exception:  # noqa: BLE001 — 超时/启动失败都算这篇没拿到
+            http.gate.record(site.domain)
+            continue
+        http.gate.record(site.domain)
+        if node.missing_playwright((err or "").strip()):
+            break                                  # 环境没有浏览器：这条腿本轮作废，别逐篇重试
+        line = ""
+        for cand in reversed((out or "").strip().splitlines()):
+            if cand.strip().startswith("{"):
+                line = cand.strip()
+                break
+        try:
+            og = (json.loads(line) or {}).get("og") or {}
+        except Exception:  # noqa: BLE001 — 拿不到就跳过这篇
+            continue
+        metrics = it.metrics or {}
+        if og.get("image"):
+            metrics["image"] = og["image"]
+        if og.get("category") and not metrics.get("category"):
+            metrics["category"] = og["category"]
         it.metrics = metrics
     return items
 

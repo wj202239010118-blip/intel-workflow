@@ -426,7 +426,11 @@ class FetchChannelTest(unittest.TestCase):
         intel = news_fetch.fetch(self._site("https://sbcnews.co.uk/feed/"), http, profile="/nonexistent-profile")
         self.assertEqual(intel.method, "feed")
         self.assertEqual(len(intel.items), 2)
-        self.assertEqual(http.calls, ["https://sbcnews.co.uk/feed/"])  # 只发了一次 HTTP，没起浏览器
+        # 第一次是 RSS；之后为补图会**逐篇抓文章页**（仍是 HTTP —— 浏览器那条腿只在
+        # 站点标了 browser_og 时才走，且要 node/playwright 可用）。
+        self.assertEqual(http.calls[0], "https://sbcnews.co.uk/feed/")
+        self.assertTrue(all(c.startswith("http") for c in http.calls))
+        self.assertLessEqual(len(http.calls), 1 + 15)      # 补图上限：每站 15 篇
         for item in intel.items:
             news_push.assert_no_cjk(item.title)
 

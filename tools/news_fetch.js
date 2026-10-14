@@ -11,7 +11,15 @@
 // 用法: node news_fetch.js --url=<列表页> --domain=<域名> [--selector="article h3 a"]
 //                          [--limit=15] [--profile=<dir>] [--headless=0|1] [--wait=2500]
 // 输出: 末行 JSON -> {"url","status","pageTitle","items":[{"rank","title","url","time"}]}
-const { chromium } = require("playwright");
+/* playwright 优先；本机若只装了全局 @playwright/mcp（它带 playwright-core，且系统已有
+   ~/Library/Caches/ms-playwright 的 chromium）就退到 core —— 两者 API 相同，core 只是不含浏览器下载。
+   CI 里会装完整 playwright。 */
+let chromium;
+try {
+  chromium = require("playwright").chromium;
+} catch (e) {
+  chromium = require("playwright-core").chromium;
+}
 
 const argv = Object.fromEntries(
   process.argv.slice(2).filter((a) => a.startsWith("--")).map((a) => {
@@ -25,9 +33,16 @@ const DOMAIN = (argv.domain || "").toLowerCase();
 const SELECTOR = argv.selector || "";
 const LIMIT = Number(argv.limit || 15);
 const PROFILE = argv.profile || "";
+/* --exec=<path>：本机调试用 —— 机器上已有别的 playwright 版本下载的 chromium 时直接指定，
+   省掉再下一份。CI 不需要（那里由 playwright 装匹配版本）。 */
+const EXEC = argv.exec || "";
 const HEADLESS = argv.headless !== undefined ? argv.headless !== "0" : false;
 const WAIT = Number(argv.wait || 2500);
 const TIMEOUT = Number(argv.timeout || 45000);
+/* --og=1：**只取 og:image**（不抽列表）。用途：像 sbcnews 这种整站对 HTTP 返回 403、
+   但图片放在独立子域且放行图片扩展名的站 —— 用浏览器读一次文章页拿到图 URL 就够了，
+   图片本身由访客浏览器直接从那个子域加载，我们不必下载。 */
+const OG_ONLY = !!argv.og;
 const UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
@@ -159,6 +174,7 @@ async function dismissConsent(page) {
 (async () => {
   const launchOpts = {
     headless: HEADLESS,
+    ...(EXEC ? { executablePath: EXEC } : {}),
     userAgent: UA,
     locale: "en-US",
     viewport: { width: 1440, height: 900 },
@@ -177,6 +193,39 @@ async function dismissConsent(page) {
       await page.waitForTimeout(600);
     }
     await page.waitForTimeout(600);
+    const pageTitle0 = await page.title().catch(() => "");
+    if (OG_ONLY) {
+      /* Cloudflare 的 JS 挑战页标题是 "Just a moment..." / "Attention required"。
+         它通常自己就能过（不需要人），所以给它几秒钟；过不去就如实报空。 */
+      for (let i = 0; i < 12; i++) {
+        const t = await page.title().catch(() => "");
+        if (t && !/just a moment|attention required|checking your browser/i.test(t)) break;
+        await page.waitForTimeout(1000);
+      }
+      const og = await page.evaluate(() => {
+        const meta = (sel, attr) => {
+          const el = document.querySelector(sel);
+          return el ? (el.getAttribute(attr || "content") || "").trim() : "";
+        };
+        const img =
+          meta('meta[property="og:image"]') ||
+          meta('meta[property="og:image:url"]') ||
+          meta('meta[name="twitter:image"]') ||
+          meta('link[rel="image_src"]', "href") ||
+          "";
+        const cat =
+          meta('meta[property="article:section"]') ||
+          meta('meta[name="section"]') ||
+          "";
+        return { image: img, category: cat };
+      });
+      console.log(JSON.stringify({
+        url: URL_, status: resp ? resp.status() : 0,
+        pageTitle: await page.title().catch(() => ""),
+        consent: consent || "", og,
+      }));
+      return;                                   // 只要 og，不抽列表
+    }
     const items = await page.evaluate(extract, { selector: SELECTOR, limit: LIMIT, domain: DOMAIN });
     const pageTitle = await page.title().catch(() => "");
     const status = resp ? resp.status() : 0;

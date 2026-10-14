@@ -49,6 +49,9 @@ class Site:
     feed: str = ""      # 可选：RSS/Atom 地址（有则走 HTTP 通道，不用浏览器）
     sitemap: str = ""   # 可选：XML sitemap 地址（同上；是 index 会自动跟到子 sitemap）
     limit: int = DEFAULT_LIMIT
+    # 整站对 HTTP 一律 403、但图片放在独立子域且放行图片扩展名（sbcnews.co.uk 正是如此）：
+    # 这时唯一能给出图 URL 的地方是文章页的 og:image → 用浏览器**只读一次**它，不下载图片。
+    browser_og: bool = False
 
 
 def domain_of(url):
@@ -74,6 +77,11 @@ def _as_list(value):
     return [str(v) for v in value if str(v).strip()]
 
 
+def _truthy(value):
+    """TOML 的 true 与内置扁平解析器回来的 "true" 都认。"""
+    return value is True or str(value).strip().lower() in ("1", "true", "yes", "on")
+
+
 def resolve(cfg):
     """内置站点 + config 覆盖/追加 → Site 列表（按域名去重，保持顺序）。"""
     section = cfg.section("news")
@@ -85,6 +93,9 @@ def resolve(cfg):
     feeds.update({str(k).lower(): str(v) for k, v in cfg.section("news.feeds").items()})
     sitemaps = {str(k).lower(): str(v) for k, v in (section.get("sitemaps") or {}).items()}
     sitemaps.update({str(k).lower(): str(v) for k, v in cfg.section("news.sitemaps").items()})
+    # [news.browser_og]：这些域名的配图只能靠浏览器读 og:image（sbcnews.co.uk 走这条）。
+    og_domains = {str(k).lower() for k, v in (section.get("browser_og") or {}).items() if _truthy(v)}
+    og_domains |= {str(k).lower() for k, v in cfg.section("news.browser_og").items() if _truthy(v)}
     limit = int(section.get("per_site_limit") or DEFAULT_LIMIT)
 
     specs = []
@@ -106,5 +117,6 @@ def resolve(cfg):
             feed=feed or feeds.get(domain, ""),
             sitemap=sitemap_url or sitemaps.get(domain, ""),
             limit=limit,
+            browser_og=domain in og_domains,
         ))
     return sites
