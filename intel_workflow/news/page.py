@@ -295,10 +295,9 @@ SCRIPT = """
     return picks.slice(0,4);
   }
   function catSection(name,items){
-    var lead=items[0]?'<span class="cat-lead">'+card(items[0],0)+'</span>':'';
     return '<section class="cat-block" data-cat="'+esc(name)+'">'
       +'<div class="sec-h"><em>'+items.length+' items</em><h2>'+esc(name)+'</h2></div>'
-      +lead+'<ul class="feed-list">'+items.slice(1).map(feedRow).join('')+'</ul></section>';
+      +'<ul class="feed-list">'+items.map(feedRow).join('')+'</ul></section>';
   }
   function card(it,i){
     var media=it.image
@@ -678,17 +677,17 @@ def _feed_row(row, esc):
                esc(row["title"]), why, esc(row.get("date_cn") or row.get("time") or "")))
 
 
-def _cat_section(name, items, esc, idx=0):
-    """一个类别块：段头（类别名 + 条数）+ 首条（图文卡）+ 其余（紧凑行）。
+def _cat_section(name, items, esc):
+    """一个类别块：段头（类别名 + 条数）+ 该类的**全部条目（统一紧凑行）**。
 
-    这就是「同一类消息聚在一起」的落地：类别内按时间排，类别之间按条数多少排。
+    「同一个级别的新闻聚在一起」—— 头条级已经进了上面的轮播，这里就都是同一档，
+    所以不再区分大卡/小卡（同一类里混着大小卡，反而像有层级差）。类别内按时间倒序，
+    类别之间按条数多少排。
     """
     head = ('<div class="sec-h"><em>%d items</em><h2>%s</h2></div>' % (len(items), esc(name)))
-    lead_card = _card(items[0], idx, esc) if items else ""
-    rows = "".join(_feed_row(r, esc) for r in items[1:])
-    return ('<section class="cat-block" data-cat="%s">%s<span class="cat-lead">%s</span>'
-            '<ul class="feed-list">%s</ul></section>'
-            % (esc(name), head, lead_card, rows))
+    rows = "".join(_feed_row(r, esc) for r in items)
+    return ('<section class="cat-block" data-cat="%s">%s<ul class="feed-list">%s</ul></section>'
+            % (esc(name), head, rows))
 
 
 def _card(row, idx, esc):
@@ -779,8 +778,7 @@ def render(pages, date=None, per_site=PER_SITE_N, site_name="iGaming Daily", ana
     for row in rest_all:
         by_cat.setdefault(_group_of(row), []).append(row)
     ordered_cats = sorted(by_cat.items(), key=lambda kv: (-len(kv[1]), kv[0]))
-    cats_html = "".join(_cat_section(name, items, esc, i + 1)
-                        for i, (name, items) in enumerate(ordered_cats))
+    cats_html = "".join(_cat_section(name, items, esc) for name, items in ordered_cats)
 
     main_col = ('<div id="live"><span class="live-pill"><i></i>Live iGaming News</span>'
                 '%s<div class="cats">%s</div></div>' % (carousel, cats_html))
