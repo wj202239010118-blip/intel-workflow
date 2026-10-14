@@ -54,7 +54,8 @@ jobs:
           CF_KV_NAMESPACE: ${{ secrets.CF_KV_NAMESPACE }}
         run: |
           python3 tools/kv_put.py out/daily.html daily:index
-          python3 tools/kv_put.py out/daily.html "daily:$(date -u +%F)"
+          # 归档 key 与页面上的「this day's page」链接（/d/<date>）同一口径 = 中国日期
+          python3 tools/kv_put.py out/daily.html "daily:$(TZ=Asia/Shanghai date +%F)"
           python3 tools/kv_put.py out/daily.json daily:json --content-type "application/json; charset=utf-8"
 
       - name: 推送到 Lark（前 10 条英文卡片；默认只打印）

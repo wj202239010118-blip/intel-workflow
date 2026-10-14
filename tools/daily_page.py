@@ -14,6 +14,7 @@ import datetime as dt
 import json
 import pathlib
 import sys
+from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
@@ -51,28 +52,44 @@ def main():
     ap = argparse.ArgumentParser(description="生成每日热点页（英文，可托到边缘）")
     ap.add_argument("--outdir", default="out", help="抓取结果目录（读 <date>-*news.jsonl）")
     ap.add_argument("--out", default=None, help="输出文件（默认 <outdir>/<date>-daily.html）")
-    ap.add_argument("--date", default=None, help="日期 YYYY-MM-DD（默认今天）")
+    ap.add_argument("--date", default=None, help="日期 YYYY-MM-DD（默认：读本机本地日、页面显示中国日）")
+    ap.add_argument("--now", default="",
+                    help="把这个时刻当成'现在'（ISO，调试用；只影响页面上的中国日期）")
     ap.add_argument("--per-site", type=int, default=news_page.PER_SITE_N,
                     help="每个来源列几条；0 = 不限（默认：各平台穷举）")
     ap.add_argument("--analyze", action="store_true",
                     help="跑分类分析（热点 / 正向 / 负向 + 主题解读）：本机 claude CLI 或 [collab] openai_*")
     args = ap.parse_args()
 
+    # 读文件的日期：产物 out/<date>-*news.jsonl 的 <date> 跟 intel save 一样取**本机本地日**
+    # （CI runner 即 UTC）——同机同口径。**别换成 ZoneInfo**，否则会像 news_brief 那样在
+    # 16:00 UTC 触发时错位一天（找次日的文件、目录里只有当日的）。
     date = args.date or dt.date.today().isoformat()
     pages = news_page.load_latest(args.outdir, date)
     if not pages:
         print(f"⚠️  {args.outdir}/ 里没有 {date} 的抓取结果（先跑 intel news run）")
         return 1
 
+    # 页面/JSON 上「这一期是哪天」按**中国时间**（读的人在中国，与 Lark 卡片抬头同口径）：
+    # 欧美站的稿子换算过来常常已跨日 → 页面显示的就是换算后的中国日期。
+    if args.date:
+        show_date = args.date
+    else:
+        _now = dt.datetime.now(dt.timezone.utc)
+        if args.now:
+            _p = dt.datetime.fromisoformat(args.now)
+            _now = _p.replace(tzinfo=dt.timezone.utc) if _p.tzinfo is None else _p
+        show_date = _now.astimezone(ZoneInfo("Asia/Shanghai")).date().isoformat()
+
     analysis = _analyze(pages, args.per_site) if args.analyze else None
 
-    doc = news_page.render(pages, date, per_site=args.per_site, analysis=analysis)
+    doc = news_page.render(pages, show_date, per_site=args.per_site, analysis=analysis)
     path = pathlib.Path(args.out) if args.out else pathlib.Path(args.outdir) / f"{date}-daily.html"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(doc, encoding="utf-8")
 
     # 同一批条目的 JSON：界面侧也要显示资讯，直接 fetch 这份
-    data = news_page.as_json(pages, date, per_site=args.per_site, analysis=analysis)
+    data = news_page.as_json(pages, show_date, per_site=args.per_site, analysis=analysis)
     json_path = path.parent / "daily.json"
     json_path.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
 
