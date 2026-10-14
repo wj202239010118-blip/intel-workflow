@@ -15,6 +15,7 @@ from .core.http import Http
 from .news import digest as news_digest
 from .news import fetch as news_fetch
 from .news import push as news_push
+from .news import ranking as news_ranking
 from .news import schedule as news_sched
 from .news import sites as news_sites
 
@@ -155,6 +156,15 @@ def _news_run(args, cfg):
         head += " · 纯 HTTP（不需要浏览器 / playwright）"
     print(head)
 
+    # 各家的「热门/排行榜」先取一次（当天量级：2 次请求）→ 用来给条目打名次。用户 2026-10-14：
+    # 按这些官方网站给新闻做排行。榜单是**增强项**：抓不到就全 0，绝不影响抓取主线。
+    try:
+        ranks = news_ranking.fetch_ranks(http)
+        print("🔥 各家热门榜：%d 条" % len(ranks))
+    except Exception as exc:  # noqa: BLE001
+        ranks = {}
+        print("⚠️  热门榜抓取失败（不影响抓取）：%r" % (exc,))
+
     # 整轮先拿 profile 锁：定时任务与手动跑撞同一个 profile 会让两边都起不来（幂等，跳过即可）
     with news_fetch.profile_lock(profile) as locked:
         if not locked:
@@ -178,6 +188,14 @@ def _news_run(args, cfg):
                 failures.append((site.key, f"error: {type(exc).__name__}"))
             else:
                 print(f"  ✅ {len(intel.items)} 条（{intel.method}）")
+                # 命中各家热门榜的记下名次（0 = 不在榜上）。榜单抓不到时 ranks 为空 → 全 0
+                for item in intel.items:
+                    metrics = item.metrics or {}
+                    metrics["hot_rank"] = news_ranking.rank_of(item.url, ranks)
+                    item.metrics = metrics
+                on_board = sum(1 for i in intel.items if (i.metrics or {}).get("hot_rank"))
+                if on_board:
+                    print(f"     🔥 其中 {on_board} 条在自家热门榜上")
                 intels.append(intel)
                 if not args.no_save:
                     md_path, _ = intel.save(outdir)

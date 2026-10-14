@@ -83,6 +83,7 @@ color:var(--muted);text-decoration:none;white-space:nowrap;cursor:pointer}
 /* ④ main：左 2/3 主列 + 右 1/3 侧栏 */
 main{padding:24px 20px 60px}
 .cols{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:26px}
+.main-col{min-width:0}                       /* 左列外层：保证 .cols 只有两个子元素 */
 .live-pill{display:inline-flex;align-items:center;gap:7px;background:var(--or-soft);color:var(--or);
 border-radius:999px;padding:6px 13px;font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase}
 .live-pill i{width:7px;height:7px;border-radius:50%;background:var(--or);display:inline-block;
@@ -226,6 +227,11 @@ cursor:pointer;transition:width .2s ease,background .2s ease}
 .cat-block:first-child{padding-top:0;border-top:0}
 .cat-block .sec-h{margin-bottom:12px}
 .cat-lead{display:block;margin:0 0 10px;max-width:420px}
+
+/* ⑧ 官方热度榜块：条目带 №N 名次徽标；块本身顶格（它排在最前） */
+#ranked{padding-top:0;border-top:0}
+.rank{display:inline-block;min-width:26px;margin-right:6px;padding:1px 6px;border-radius:6px;
+font-size:10.5px;font-weight:800;letter-spacing:.2px;vertical-align:middle;color:#fff;background:var(--or)}
 """
 
 # tab 切换：纯前端，无依赖。支持 `#hot` 这种深链接，刷新后仍停在同一个 tab。
@@ -465,6 +471,7 @@ def _all_items(pages):
                 "site_key": page.get("platform") or "",
                 "image": metrics.get("image") or item.get("image") or "",
                 "category": metrics.get("category") or item.get("category") or "",
+                "hot_rank": int(metrics.get("hot_rank") or 0),   # 自家官网热门榜名次（0=不在榜上）
                 "pos": pos,
             }
             # 显示用的日期：来源站发布时刻 → 中国日期（没有 ts 的站点退回原文日期）
@@ -659,8 +666,8 @@ def _chip(row):
     return '<span class="chip chip-%s">%s</span>' % (kind, label)
 
 
-def _feed_row(row, esc):
-    """长尾条目：紧凑一行（缩略图/占位 + 分类 + 标题 + why + 日期），只留 why 不留摘要。"""
+def _feed_row(row, esc, badge=""):
+    """长尾条目：紧凑一行（缩略图/占位 + [名次徽标] + 分类 + 标题 + why + 日期），只留 why。"""
     image = row.get("image") or ""
     if image:
         thumb = ('<img src="%s" alt="" loading="lazy" referrerpolicy="no-referrer" '
@@ -670,10 +677,11 @@ def _feed_row(row, esc):
         # 占位块里已经写了分类名 → 不再重复一个同样的角标
         thumb = '<span class="noimg">%s</span>' % esc(row.get("category") or "News")
         cat = ""
+    mark = ('<span class="rank">%s</span>' % esc(badge)) if badge else ""
     why = ('<p class="why2">%s</p>' % esc(row["why"])) if row.get("why") else ""
-    return ('<li class="feed-row" data-site="%s">%s<div>%s<h4><a href="%s" target="_blank" '
+    return ('<li class="feed-row" data-site="%s">%s<div>%s%s<h4><a href="%s" target="_blank" '
             'rel="noopener nofollow">%s</a></h4>%s</div><time class="d">%s</time></li>'
-            % (esc(row.get("site_key") or ""), thumb, cat, esc(row["url"]),
+            % (esc(row.get("site_key") or ""), thumb, mark, cat, esc(row["url"]),
                esc(row["title"]), why, esc(row.get("date_cn") or row.get("time") or "")))
 
 
@@ -688,6 +696,22 @@ def _cat_section(name, items, esc):
     rows = "".join(_feed_row(r, esc) for r in items)
     return ('<section class="cat-block" data-cat="%s">%s<ul class="feed-list">%s</ul></section>'
             % (esc(name), head, rows))
+
+
+def _ranked_section(rows, esc):
+    """各家官网热门榜上的条目 → 单独一块（带 `№N`），放在最前。
+
+    用户 2026-10-14：按这些官方网站给新闻做排行。名次**直接来自各家自己的榜单**
+    （igaming.news 的 Most read stories / yogonet 的 TOP STORIES），不是我们猜的。
+    这块放在 `#live` 之外：实时刷新只重建 `#live`，不会把它冲掉（榜单一天才变一次）。
+    """
+    if not rows:
+        return ""
+    items = "".join(_feed_row(r, esc, badge="\u2116%d" % r["hot_rank"]) for r in rows)
+    head = ('<div class="sec-h"><em>%d from publishers\' boards</em><h2>Top ranked</h2></div>'
+            % len(rows))
+    return ('<section class="cat-block ranked" id="ranked" data-cat="Top ranked">%s'
+            '<ul class="feed-list">%s</ul></section>' % (head, items))
 
 
 def _card(row, idx, esc):
@@ -774,14 +798,23 @@ def render(pages, date=None, per_site=PER_SITE_N, site_name="iGaming Daily", ana
 
     # 按类别成块（聚合平台的核心：同一类消息聚在一起）。类别内保持时间倒序，
     # 类别之间按条数多少排 —— 内容多的类别（说明当下更热）自然靠前。
+    # 各家官网热门榜上的条目 → 单独一块放最前（按名次），并从类别块里剔除，避免同一类里重复出现。
+    ranked = sorted([r for r in rest_all if r.get("hot_rank")], key=lambda r: r["hot_rank"])
+    ranked_urls = {r["url"] for r in ranked}
+    rest_cats = [r for r in rest_all if r["url"] not in ranked_urls]
+
     by_cat = collections.OrderedDict()
-    for row in rest_all:
+    for row in rest_cats:
         by_cat.setdefault(_group_of(row), []).append(row)
     ordered_cats = sorted(by_cat.items(), key=lambda kv: (-len(kv[1]), kv[0]))
     cats_html = "".join(_cat_section(name, items, esc) for name, items in ordered_cats)
 
-    main_col = ('<div id="live"><span class="live-pill"><i></i>Live iGaming News</span>'
-                '%s<div class="cats">%s</div></div>' % (carousel, cats_html))
+    # 注意：main_col 必须**只有一个顶层元素**——否则 .cols 这个两列 grid 会把 `#live`
+    # 当成第二列，整页排版全乱（2026-10-14 加 Top ranked 块时就这么踩过一次）。
+    main_col = ('<div class="main-col">%s'
+                '<div id="live"><span class="live-pill"><i></i>Live iGaming News</span>'
+                '%s<div class="cats">%s</div></div></div>'
+                % (_ranked_section(ranked, esc), carousel, cats_html))
 
     top = "".join(_topic_item(r, esc) for r in ordered[:4])
     side = ('<aside class="side">'
