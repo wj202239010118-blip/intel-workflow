@@ -148,6 +148,63 @@ footer{color:var(--dim);font-size:12.5px;padding:0 20px 40px}
 footer .wrap{border-top:1px solid var(--line);padding-top:14px}
 @media (max-width:820px){.cols,.srow{grid-template-columns:1fr}.mast .wrap{gap:14px}
 .lead h2{font-size:26px}}
+
+/* ══ 2026-10-14 评审优化 ══════════════════════════════════════════
+   来源：claude 的建议（① sticky 右列 ② 头条→3 精选→长尾列表 的层级
+   ③ 头条文字叠到图上省首屏 ④ 无图做成一种样式 ⑤ 色条改小胶囊）。 */
+
+/* ① 右列贴着滚动：左列再长，右下也不会留大片空白（零新增内容） */
+.side{position:sticky;top:84px}
+
+/* ② 层级：头条 → 3 张精选（图+why+摘要都留）→ 长尾紧凑列表（只留 why） */
+.featured-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;margin:26px 0 30px}
+.feed-label{margin:0 0 2px;padding-top:22px;border-top:1px solid var(--line);font-size:11px;font-weight:700;
+letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.feed-list{list-style:none;margin:0;padding:0}
+.feed-row{display:grid;grid-template-columns:96px minmax(0,1fr) auto;gap:14px;align-items:center;
+padding:14px 0;border-bottom:1px solid var(--hair)}
+.feed-row img{width:96px;height:64px;border-radius:8px;object-fit:cover;object-position:50% 35%;background:var(--bar)}
+.feed-row .noimg{width:96px;height:64px;border-radius:8px;display:flex;align-items:center;justify-content:center;
+padding:4px;overflow:hidden;text-align:center;font-size:9.5px;font-weight:800;letter-spacing:.5px;
+text-transform:uppercase;color:var(--or);background:linear-gradient(135deg,#fdece0,#f4f5f6)}
+.feed-row h4{margin:3px 0;font-size:15px;font-weight:700;line-height:1.3}
+.feed-row h4 a{color:var(--fg);text-decoration:none}
+.feed-row h4 a:hover{color:var(--link)}
+.feed-row .why2{margin:0;font-size:13px;color:var(--link);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.feed-row .d{font-size:12px;color:var(--dim);white-space:nowrap}
+
+/* ③ 头条：文字叠在图内（省掉「图高 + 文字高」的叠加），比例放宽到 2:1 */
+.hero{display:block;margin:14px 0 0;text-decoration:none;color:inherit}
+.hero-media{position:relative;display:flex;align-items:flex-end;aspect-ratio:2/1;border-radius:14px;
+overflow:hidden;background:var(--hair)}
+.hero-media img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 35%}
+.hero-scrim{position:absolute;inset:0;
+background:linear-gradient(to top,rgba(0,0,0,.8) 0%,rgba(0,0,0,.18) 55%,rgba(0,0,0,0) 100%)}
+.hero-text{position:relative;padding:0 24px 20px}
+.hero-cat{font-size:12px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#ffb877}
+.hero-title{display:block;margin:6px 0 0;font-size:30px;line-height:1.15;font-weight:800;letter-spacing:-.5px;color:#fff}
+.hero-sum{margin:8px 0 0;font-size:14px;color:rgba(255,255,255,.84);display:-webkit-box;
+-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.hero-why{margin:12px 0 0;font-size:15px;color:var(--link)}
+
+/* ④ 无图不是 bug，是一种卡片样式：统一渐变 + 分类字样占位 */
+.nophoto{display:flex;align-items:center;justify-content:center;aspect-ratio:16/9;border-radius:10px;
+margin:0 0 12px;padding:8px;text-align:center;font-size:13px;font-weight:800;letter-spacing:.6px;
+text-transform:uppercase;color:var(--or);background:linear-gradient(135deg,#fdece0,#f4f5f6)}
+
+/* ⑤ sentiment：左侧 3px 色条改成小胶囊（有图无图都一致，不再和图片边缘打架） */
+article,article.hot,article.positive,article.negative{border-left:1px solid var(--line)}
+.chip{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;
+font-size:10px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;vertical-align:middle}
+.chip-hot{color:var(--or);background:#fdecd9}
+.chip-positive{color:var(--pos);background:#eaf7f0}
+.chip-negative{color:var(--neg);background:#fdecef}
+.chip-row{margin:0 0 8px;display:flex;align-items:center;gap:8px}
+
+@media (max-width:820px){.featured-row{grid-template-columns:1fr}.hero-title{font-size:22px}
+.hero-text{padding:0 16px 14px}}
+@media (max-width:560px){.feed-row{grid-template-columns:72px minmax(0,1fr)}
+.feed-row img,.feed-row .noimg{width:72px;height:48px}}
 """
 
 # tab 切换：纯前端，无依赖。支持 `#hot` 这种深链接，刷新后仍停在同一个 tab。
@@ -171,20 +228,38 @@ SCRIPT = """
   function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
   function label(it){return LABEL[it.site_key]||it.site||'';}
-  function card(it,i){
-    var img=it.image?'<img class="thumb" src="'+esc(it.image)+'" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">':'';
-    var tag=it.category?'<span class="tag">'+esc(it.category)+'</span>':'';
-    var sum=it.summary?'<p class="sum">'+esc(it.summary)+'</p>':'';
-    var when=it.date_cn?' · '+esc(it.date_cn):'';
-    return '<article id="'+(i+1)+'" class="'+(img?'':'plain')+'" data-site="'+esc(it.site_key||'')+'">'
-      +img+tag+'<h3><a href="'+esc(it.url)+'" target="_blank" rel="noopener nofollow">'+esc(it.title)+'</a></h3>'
-      +'<p class="meta">'+when+'</p>'+sum+'</article>';
+  function chip(it){
+    var k=it.kind==='hot'?'hot':(it.sentiment||'');
+    if(k!=='hot'&&k!=='positive'&&k!=='negative') return '';
+    return '<span class="chip chip-'+k+'">'+k.charAt(0).toUpperCase()+k.slice(1)+'</span>';
   }
-  function leadHtml(it){
-    var img=it.image?'<img src="'+esc(it.image)+'" alt="" referrerpolicy="no-referrer" onerror="this.style.display=&#39;none&#39;">':'';
-    return '<a class="lead" href="'+esc(it.url)+'" target="_blank" rel="noopener nofollow" data-site="'+esc(it.site_key||'')+'">'
-      +img+'<span class="kicker">'+esc(it.category||"")+'</span><h2>'+esc(it.title)+'</h2>'
-      +(it.summary?'<p>'+esc(it.summary)+'</p>':'')+'</a>';
+  function heroHtml(it){
+    var img=it.image?'<img src="'+esc(it.image)+'" alt="" referrerpolicy="no-referrer">':'';
+    var cat=it.category?'<span class="hero-cat">'+esc(it.category)+'</span>':'';
+    var sum=it.summary?'<span class="hero-sum">'+esc(it.summary)+'</span>':'';
+    return '<a class="hero" href="'+esc(it.url)+'" target="_blank" rel="noopener nofollow">'
+      +'<span class="hero-media">'+img+'<span class="hero-scrim"></span>'
+      +'<span class="hero-text">'+cat+'<span class="hero-title">'+esc(it.title)+'</span>'+sum+'</span></span></a>';
+  }
+  function card(it,i){
+    var media=it.image
+      ? '<img class="thumb" src="'+esc(it.image)+'" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">'
+      : '<span class="nophoto">'+esc(it.category||'Headline')+'</span>';
+    var tag=(it.image&&it.category)?'<span class="tag">'+esc(it.category)+'</span>':'';   // 无图时分类已在占位块里
+    var sum=it.summary?'<p class="sum">'+esc(it.summary)+'</p>':'';
+    return '<article id="'+(i+1)+'" data-site="'+esc(it.site_key||'')+'">'+media
+      +'<span class="chip-row">'+chip(it)+tag+'</span>'
+      +'<h3><a href="'+esc(it.url)+'" target="_blank" rel="noopener nofollow">'+esc(it.title)+'</a></h3>'
+      +'<p class="meta">'+esc(it.date_cn||'')+'</p>'+sum+'</article>';
+  }
+  function feedRow(it){
+    var thumb=it.image
+      ? '<img src="'+esc(it.image)+'" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">'
+      : '<span class="noimg">'+esc(it.category||'News')+'</span>';
+    var cat=(it.image&&it.category)?'<span class="tag">'+esc(it.category)+'</span>':'';   // 无图时分类已在占位块里
+    return '<li class="feed-row" data-site="'+esc(it.site_key||'')+'">'+thumb+'<div>'+cat
+      +'<h4><a href="'+esc(it.url)+'" target="_blank" rel="noopener nofollow">'+esc(it.title)+'</a></h4>'
+      +'</div><time class="d">'+esc(it.date_cn||'')+'</time></li>';
   }
   function topic(it){
     var img=it.image?'<img src="'+esc(it.image)+'" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">':'';
@@ -199,9 +274,12 @@ SCRIPT = """
     var head=null, idx=0, i;
     for(i=0;i<items.length;i++){ if(items[i].image){head=items[i];idx=i;break;} }
     if(!head){ head=items[0]; idx=0; }
-    var rest=items.slice(0,idx).concat(items.slice(idx+1)).slice(0,24);
+    var rest=items.slice(0,idx).concat(items.slice(idx+1));
     box.innerHTML='<span class="live-pill"><i></i>Live iGaming News</span>'
-      +(head?leadHtml(head):'')+'<div class="grid">'+rest.map(card).join('')+'</div>';
+      +(head?heroHtml(head):'')
+      +'<div class="featured-row">'+rest.slice(0,3).map(card).join('')+'</div>'
+      +'<h3 class="feed-label">More headlines</h3>'
+      +'<ul class="feed-list">'+rest.slice(3).map(feedRow).join('')+'</ul>';
     var top=document.querySelector('#top ul');
     if(top) top.innerHTML=items.slice(0,4).map(topic).join('');
     applyFilter();
@@ -369,18 +447,19 @@ def _site_label(row):
     return SITE_LABEL.get(key) or row.get("site") or key
 
 
-def _lead(row, esc):
-    """左列的 LIVE 大头条：大图（有则显）+ 分类角标 + 大标题 + 摘要。"""
+def _hero(row, esc):
+    """LIVE 大头条：文字叠在图内（省掉「图高＋文字高」的叠加，首屏不再被图吃掉）。"""
     if not row:
         return ""
     image = row.get("image") or ""
-    img = ('<img src="%s" alt="" referrerpolicy="no-referrer" '
-           'onerror="this.style.display=\'none\'">' % esc(image)) if image else ""
-    kicker = esc(row.get("category") or _site_label(row))
-    return ('<a class="lead" href="%s" target="_blank" rel="noopener nofollow" data-site="%s">'
-            '%s<span class="kicker">%s</span><h2>%s</h2><p>%s</p></a>'
-            % (esc(row["url"]), esc(row.get("site_key") or ""), img, kicker,
-               esc(row["title"]), esc(row.get("summary") or "")))
+    img = ('<img src="%s" alt="" referrerpolicy="no-referrer">' % esc(image)) if image else ""
+    cat = ('<span class="hero-cat">%s</span>' % esc(row.get("category"))) if row.get("category") else ""
+    summary = ('<span class="hero-sum">%s</span>' % esc(row.get("summary"))) if row.get("summary") else ""
+    why = ('<p class="hero-why">%s</p>' % esc(row["why"])) if row.get("why") else ""
+    return ('<a class="hero" href="%s" target="_blank" rel="noopener nofollow">'
+            '<span class="hero-media">%s<span class="hero-scrim"></span>'
+            '<span class="hero-text">%s<span class="hero-title">%s</span>%s</span></span></a>%s'
+            % (esc(row["url"]), img, cat, esc(row["title"]), summary, why))
 
 
 def _topic_item(row, esc):
@@ -407,31 +486,57 @@ def _themes_card(themes, esc):
             '%s</section>' % blocks)
 
 
-def _card(row, idx, esc):
-    """一张图文卡：图（有则显）→ 分类角标 → 标题 → 来源·中国日期 → 一句 why → 摘要。
+def _chip(row):
+    """sentiment 小胶囊（替代原来的左侧 3px 色条：有图无图表现一致，不再和图片边缘打架）。"""
+    kind = "hot" if row.get("kind") == "hot" else (row.get("sentiment") or "")
+    if kind not in ("hot", "positive", "negative"):
+        return ""
+    label = {"hot": "Hot", "positive": "Positive", "negative": "Negative"}[kind]
+    return '<span class="chip chip-%s">%s</span>' % (kind, label)
 
-    左侧色条沿用分析结论（hot 橙 / positive 绿 / negative 红）—— 新版面没有 tab，
-    分析结论就落在色条 + why 这一行上。
-    """
+
+def _feed_row(row, esc):
+    """长尾条目：紧凑一行（缩略图/占位 + 分类 + 标题 + why + 日期），只留 why 不留摘要。"""
+    image = row.get("image") or ""
+    if image:
+        thumb = ('<img src="%s" alt="" loading="lazy" referrerpolicy="no-referrer" '
+                 'onerror="this.remove()">' % esc(image))
+        cat = ('<span class="tag">%s</span>' % esc(row.get("category"))) if row.get("category") else ""
+    else:
+        # 占位块里已经写了分类名 → 不再重复一个同样的角标
+        thumb = '<span class="noimg">%s</span>' % esc(row.get("category") or "News")
+        cat = ""
+    why = ('<p class="why2">%s</p>' % esc(row["why"])) if row.get("why") else ""
+    return ('<li class="feed-row" data-site="%s">%s<div>%s<h4><a href="%s" target="_blank" '
+            'rel="noopener nofollow">%s</a></h4>%s</div><time class="d">%s</time></li>'
+            % (esc(row.get("site_key") or ""), thumb, cat, esc(row["url"]),
+               esc(row["title"]), why, esc(row.get("date_cn") or row.get("time") or "")))
+
+
+def _card(row, idx, esc):
+    """精选卡（头条下面那 3 张）：图或无图占位 → 分类 + sentiment 胶囊 → 标题 → 日期 → why → 摘要。"""
     title = esc(row["title"])
     if row["url"]:
         head = f'<a href="{esc(row["url"])}" target="_blank" rel="noopener nofollow">{title}</a>'
     else:
         head = title
     image = row.get("image") or ""
-    thumb = ('<img class="thumb" src="%s" alt="" loading="lazy" referrerpolicy="no-referrer" '
-             'onerror="this.remove()">' % esc(image)) if image else ""
-    tag = ('<span class="tag">%s</span>' % esc(row.get("category") or _site_label(row))
-           if row.get("category") else "")
+    if image:
+        media = ('<img class="thumb" src="%s" alt="" loading="lazy" referrerpolicy="no-referrer" '
+                 'onerror="this.remove()">' % esc(image))
+        tag = ('<span class="tag">%s</span>' % esc(row.get("category"))) if row.get("category") else ""
+    else:
+        # 无图不是 bug，是一种卡片样式（统一渐变 + 分类字样），别留空白也别用假图。
+        # 分类字样已经在占位里 → 不再另外输出角标，免得分同一个类出现两遍。
+        media = '<span class="nophoto">%s</span>' % esc(row.get("category") or "Headline")
+        tag = ""
     meta = esc(row.get("date_cn") or row["time"])      # 不标来源：几家平台彻底汇总成一个流
     why = f'<p class="why">{esc(row["why"])}</p>' if row.get("why") else ""
     summary = f'<p class="sum">{esc(row["summary"])}</p>' if row["summary"] else ""
-    cls = "hot" if row.get("kind") == "hot" else (row.get("sentiment") or "")
     # id = 全局序号：推送里可以直接 `#3` 定位到第 3 条
-    return ('<article id="%d" class="%s%s" data-site="%s">%s%s<h3>%s</h3>'
+    return ('<article id="%d" data-site="%s">%s<span class="chip-row">%s%s</span><h3>%s</h3>'
             '<p class="meta">%s</p>%s%s</article>'
-            % (idx, cls, "" if thumb else " plain", esc(row.get("site_key") or ""),
-               thumb, tag, head, meta, why, summary))
+            % (idx, esc(row.get("site_key") or ""), media, _chip(row), tag, head, meta, why, summary))
 
 
 def render(pages, date=None, per_site=PER_SITE_N, site_name="iGaming Daily", analysis=None):
@@ -480,11 +585,17 @@ def render(pages, date=None, per_site=PER_SITE_N, site_name="iGaming Daily", ana
             '<a href="#themes">Themes</a></nav>'
             '<a class="cta" href="#live">Live feed</a></div></header>')
 
-    # 彻底汇总：不按来源分区、卡上也不标来源 —— 几家平台混成一个时间流（用户 2026-10-14：只看结果）
-    grid = "".join(_card(r, i + 1, esc) for i, r in enumerate(rest))
+    # 彻底汇总 + 分层（2026-10-14 评审优化）：头条 → 3 张精选（图/why/摘要都留）
+    # → 长尾紧凑列表（只留 why）。页面长度砍掉一大截，右列靠 sticky 跟滚、不再留空白。
+    featured = rest[:3]
+    featured_html = "".join(_card(r, i + 1, esc) for i, r in enumerate(featured))
+    tail_html = "".join(_feed_row(r, esc) for r in rest[3:])
     main_col = ('<div id="live"><span class="live-pill"><i></i>Live iGaming News</span>'
-                '%s<div class="grid">%s</div></div>'
-                % (_lead(lead, esc) if lead else "", grid))
+                '%s'
+                '<div class="featured-row">%s</div>'
+                '<h3 class="feed-label">More headlines</h3>'
+                '<ul class="feed-list">%s</ul></div>'
+                % (_hero(lead, esc) if lead else "", featured_html, tail_html))
 
     top = "".join(_topic_item(r, esc) for r in ordered[:4])
     side = ('<aside class="side">'
