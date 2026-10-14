@@ -23,6 +23,13 @@ jobs:
         run: |
           npm i playwright --no-save --no-audit --no-fund
           npx playwright install --with-deps chromium
+      - name: 直接裸测 --og（看无头浏览器能否过 Cloudflare，原样打印 JSON）
+        run: |
+          node tools/news_fetch.js --og=1 \
+            --url="https://sbcnews.co.uk/sportsbook/2026/10/13/betby-polish-market-growth/" \
+            --domain=sbcnews.co.uk --headless=1 --wait=6000 --timeout=45000 \
+            || echo "（退出码非 0）"
+
       - name: 抓取（sbcnews 那条腿会走浏览器读 og:image）
         run: python3 intel news run --out out
       - name: 看 sbcnews 补到几张图
