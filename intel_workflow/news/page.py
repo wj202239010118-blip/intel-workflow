@@ -380,8 +380,10 @@ SCRIPT = """
     /* 类别之间按条数多少排（内容多的类别说明当下更热），与 SSR 一致 */
     order.sort(function(a,b){ return groups[b].length-groups[a].length || a.localeCompare(b); });
     var cats=order.map(function(g){ return catSection(g,groups[g]); }).join('');
-    box.innerHTML='<span class="live-pill"><i></i>Live iGaming News</span>'+car
-      +'<div class="cats">'+cats+'</div>';
+    box.innerHTML='<span class="live-pill"><i></i>Live iGaming News</span>'+car;
+    /* 类别块是另一个容器：中间夹着 Top ranked（前端不碰它，榜单一天才变一次） */
+    var catsBox=document.getElementById('cats');
+    if(catsBox) catsBox.innerHTML=cats;
     var top=document.querySelector('#top ul');
     if(top) top.innerHTML=items.slice(0,4).map(topic).join('');
     applyFilter();
@@ -809,12 +811,15 @@ def render(pages, date=None, per_site=PER_SITE_N, site_name="iGaming Daily", ana
     ordered_cats = sorted(by_cat.items(), key=lambda kv: (-len(kv[1]), kv[0]))
     cats_html = "".join(_cat_section(name, items, esc) for name, items in ordered_cats)
 
-    # 注意：main_col 必须**只有一个顶层元素**——否则 .cols 这个两列 grid 会把 `#live`
-    # 当成第二列，整页排版全乱（2026-10-14 加 Top ranked 块时就这么踩过一次）。
-    main_col = ('<div class="main-col">%s'
+    # 顺序（用户 2026-10-14）：**轮播头条在最上** → Top ranked → 类别块。
+    # `#live`（轮播）与 `#cats`（类别块）是实时刷新会重建的两块；`#ranked` 夹在中间、
+    # 不归前端管（榜单一天才变一次）→ 刷新不会把它冲掉，也不会顶到头条上面去。
+    main_col = ('<div class="main-col">'
                 '<div id="live"><span class="live-pill"><i></i>Live iGaming News</span>'
-                '%s<div class="cats">%s</div></div></div>'
-                % (_ranked_section(ranked, esc), carousel, cats_html))
+                '%s</div>'
+                '%s'
+                '<div id="cats" class="cats">%s</div></div>'
+                % (carousel, _ranked_section(ranked, esc), cats_html))
 
     top = "".join(_topic_item(r, esc) for r in ordered[:4])
     side = ('<aside class="side">'
