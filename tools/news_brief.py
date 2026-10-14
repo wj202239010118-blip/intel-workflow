@@ -246,7 +246,8 @@ def flat_text(title, picked, zh):
 def main():
     ap = argparse.ArgumentParser(description="日报 → Lark 内部群快讯卡片（全中文、只推各站当地当日）")
     ap.add_argument("--outdir", default=OUT, help="抓取结果目录（读 <date>-*.jsonl）")
-    ap.add_argument("--date", default="", help="读哪天的 jsonl（默认按 HEADLINE_TZ 的今天）")
+    ap.add_argument("--date", default="",
+                    help="读哪天的 jsonl（默认按抓取机的 UTC 今天，回落 HEADLINE_TZ 的今天）")
     ap.add_argument("--now", default="", help="把这个时刻当成'现在'（ISO，调试用；如 2026-10-13T01:30）")
     ap.add_argument("--lookback", type=int, default=0,
                     help="放宽到最近 N 天（默认 0 = 严格各站当地当天）")
@@ -264,10 +265,21 @@ def main():
         now = parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed
 
     today_cn = now.astimezone(ZoneInfo(HEADLINE_TZ)).strftime("%Y-%m-%d")
-    date = a.date or today_cn
-    pages = news_page.load_latest(a.outdir, date)
+    # 抓取产物 out/<date>-*news.jsonl 的 <date> 是**抓取机的 UTC 当天**（intel save 用
+    # date.today()，CI runner 是 UTC）。而定时入口固定在 16:00 UTC 触发 —— 那一刻北京已跨到
+    # 次日，拿 today_cn 去找文件必然落空（2026-10-13T16:00 那次就是这么挂的：找 10-14、
+    # 只有 10-13）。所以先按 UTC 今天找；本地（北京）手动跑时再回落到中国今天。
+    today_utc = now.strftime("%Y-%m-%d")
+    cands = [a.date] if a.date else [today_utc, today_cn]
+    date, pages = "", []
+    for _cand in cands:
+        pages = news_page.load_latest(a.outdir, _cand)
+        if pages:
+            date = _cand
+            break
     if not pages:
-        print("❌ 找不到 %s 的抓取结果（%s/<date>-*.jsonl）——先跑 `./intel news run`" % (date, a.outdir))
+        print("❌ 找不到抓取结果（试过 %s —— %s/<date>-*news.jsonl）——先跑 `./intel news run`"
+              % (", ".join(cands), a.outdir))
         return 1
 
     total = sum(len(p.get("items") or []) for p in pages)
