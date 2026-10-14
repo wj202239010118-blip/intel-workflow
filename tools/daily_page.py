@@ -88,6 +88,13 @@ def main():
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(doc, encoding="utf-8")
 
+    # 收录页（同一站点的第二个页面 `/?top`）：同一批条目，但把各家热门榜**完整收全**
+    # ——首页侧栏只放前 4 条，这里全收（照 igaming.news 的 /top-reads）。
+    # 写在 daily.html 同目录，便于一起推上边缘 KV。
+    top_path = path.parent / "top.html"
+    top_path.write_text(news_page.render_top(pages, show_date), encoding="utf-8")
+    print(f"💾 {top_path}（收录页 /?top）")
+
     # 同一批条目的 JSON：界面侧也要显示资讯，直接 fetch 这份
     data = news_page.as_json(pages, show_date, per_site=args.per_site, analysis=analysis)
     json_path = path.parent / "daily.json"

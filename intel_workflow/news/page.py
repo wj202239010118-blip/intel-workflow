@@ -244,6 +244,27 @@ white-space:nowrap;transition:background .15s ease,border-color .15s ease,color 
 .catnav a .n{font-size:11.5px;font-weight:600;color:var(--dim)}
 .catnav a:hover .n{color:var(--or)}
 .cat-block{scroll-margin-top:84px}
+
+/* ⑩ 收录页（/?top）：照 igaming.news 的 /top-reads —— 大标题 + 名次卡片列表 */
+.page-h{margin:0 0 6px;font-size:34px;line-height:1.15;letter-spacing:-.5px}
+.page-sub{margin:0 0 26px;color:var(--dim);font-size:14px}
+.toplist{margin:0 0 34px}
+.tl{list-style:none;margin:0;padding:0}
+.tl-row{display:flex;align-items:flex-start;gap:16px;padding:16px;margin:0 0 10px;
+background:#fff;border:1px solid var(--line);border-radius:12px}
+.tl-n{flex:0 0 auto;display:flex;align-items:center;justify-content:center;width:44px;height:44px;
+border-radius:10px;background:var(--hair);color:var(--fg);font-size:18px;font-weight:800}
+.tl-row.hot .tl-n{background:var(--or);color:#fff}
+.tl-thumb{flex:0 0 auto;width:112px;height:74px;object-fit:cover;border-radius:8px;background:var(--hair)}
+.tl-nophoto{flex:0 0 auto;display:flex;align-items:center;justify-content:center;width:112px;height:74px;
+border-radius:8px;background:linear-gradient(135deg,#eef1f4,#e2e7ec);color:#8a94a0;
+font-size:10.5px;font-weight:700;letter-spacing:.5px;text-align:center;padding:0 6px}
+.tl-body{flex:1 1 auto;min-width:0}
+.tl-body h3{margin:4px 0 6px;font-size:17px;line-height:1.35}
+.tl-body h3 a{color:var(--fg);text-decoration:none}
+.tl-body h3 a:hover{color:var(--or)}
+.tl-body time{color:var(--dim);font-size:12.5px}
+.mainnav a.on{color:var(--fg);font-weight:700}
 """
 
 # tab 切换：纯前端，无依赖。支持 `#hot` 这种深链接，刷新后仍停在同一个 tab。
@@ -889,7 +910,7 @@ def render(pages, date=None, per_site=PER_SITE_N, site_name="iGaming Daily", ana
     top = "".join(_topic_item(r, esc) for r in ordered[:4])
     side = ('<aside class="side">'
             '<section class="topic" id="top"><div class="topic-h"><b>Top reads</b>'
-            '<a class="more" href="#live">Explore more \u2192</a></div><ul>%s</ul></section>'
+            '<a class="more" href="/?top">Explore more \u2192</a></div><ul>%s</ul></section>'
             '%s</aside>' % (top, _themes_card(themes, esc)))
 
     if not rows:
@@ -918,6 +939,96 @@ def render(pages, date=None, per_site=PER_SITE_N, site_name="iGaming Daily", ana
 </div></footer>
 <script>window.__SITE_LABEL={json.dumps(SITE_LABEL, ensure_ascii=False)};</script>
 <script>{SCRIPT}</script>
+</body>
+</html>
+"""
+
+
+def _top_card(row, idx, esc):
+    """收录页的一张名次卡：方块数字徽标 + 缩略图 + 分类 + 标题 + 日期。
+
+    方块数字徽标与「前两名换强调色」是照 igaming.news 的 /top-reads 做的。
+    """
+    image = row.get("image") or ""
+    if image:
+        thumb = ('<img class="tl-thumb" src="%s" alt="" loading="lazy" '
+                 'referrerpolicy="no-referrer" onerror="this.remove()">' % esc(image))
+        cat = ('<span class="tag">%s</span>' % esc(row.get("category"))) if row.get("category") else ""
+    else:
+        # 无图不是错，是另一种样式（渐变底 + 分类字样）；字样已在占位里，不再重复角标
+        thumb = '<span class="tl-nophoto">%s</span>' % esc(row.get("category") or "News")
+        cat = ""
+    return ('<li class="tl-row%s"><span class="tl-n">%d</span>%s'
+            '<div class="tl-body">%s<h3><a href="%s">%s</a></h3><time>%s</time></div></li>'
+            % (" hot" if idx <= 2 else "", idx, thumb, cat,
+               esc(row.get("url")), esc(row.get("title")), esc(row.get("date_cn") or "")))
+
+
+def render_top(pages, date=None, per_site=60, site_name="iGaming Daily"):
+    """收录页（`/?top`）：把各家官网热门榜上的条目**完整收在一页**。
+
+    骨架照 igaming.news 的 /top-reads：大标题 + 「Most read stories」名次卡片列表
+    + 「Latest headlines」列表。与首页的区别：首页侧栏只放榜单前 4 条，这里全收。
+
+    同样**不标来源平台**（用户 2026-10-14「我只看结果」）；`<!--CONSOLE_ENTRY-->`
+    占位符照留，由托管方按权限决定要不要注入控制台入口。
+    """
+    date = date or dt.date.today().isoformat()
+    try:
+        pretty = dt.date.fromisoformat(date).strftime("%d %b %Y")
+    except Exception:
+        pretty = date
+    esc = lambda value: html_mod.escape(_plain(value))          # noqa: E731
+
+    rows = collect(pages, per_site)
+    ordered = sorted(rows, key=lambda r: (r.get("date_cn") or "", r.get("ts") or ""), reverse=True)
+    ranked = sorted([r for r in ordered if r.get("hot_rank")], key=lambda r: r["hot_rank"])
+
+    cards = "".join(_top_card(r, i, esc) for i, r in enumerate(ranked, 1))
+    most = ('<section class="toplist" id="most-read">'
+            '<div class="sec-h"><em>%d from publishers\' boards</em>'
+            '<h2>Most read stories</h2></div><ol class="tl">%s</ol></section>'
+            % (len(ranked), cards)) if ranked else ""
+
+    latest_rows = ordered[:24]
+    latest = ('<section class="toplist" id="latest">'
+              '<div class="sec-h"><em>%d items</em><h2>Latest headlines</h2></div>'
+              '<ul class="feed-list">%s</ul></section>'
+              % (len(latest_rows), "".join(_feed_row(r, esc) for r in latest_rows)))
+
+    ubar = ('<div class="ubar"><div class="wrap">'
+            '<a class="arch" href="/?news">\u2190 Today\'s edition</a>'
+            '<span class="pill">%s</span></div></div>' % esc(pretty))
+    mast = ('<header class="mast"><div class="wrap">'
+            '<a class="wordmark" href="/?news">iGaming<span>Daily</span></a>'
+            '<nav class="mainnav"><a href="/?news">Latest</a>'
+            '<a class="on" href="/?top">Top reads</a>'
+            '<a href="/?news#themes">Themes</a></nav>'
+            '<a class="cta" href="/?news">Live feed</a></div></header>')
+
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Top reads — {esc(site_name)}</title>
+<meta name="description" content="Most-read iGaming stories of the day, collected from each publisher's own most-read board.">
+<meta name="robots" content="index,follow">
+<style>{STYLE}</style>
+</head>
+<body>
+{ubar}
+{mast}
+<main class="wrap">
+<h1 class="page-h">Top reads</h1>
+<p class="page-sub">Collected from the publishers' own most-read boards — the whole industry on one page.</p>
+{most}
+{latest}
+{PLACEHOLDER}
+</main>
+<footer><div class="wrap">
+<p>Rankings come from each publisher's own most-read board. Links open the original publishers.</p>
+</div></footer>
 </body>
 </html>
 """

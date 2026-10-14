@@ -54,6 +54,7 @@ jobs:
           CF_KV_NAMESPACE: ${{ secrets.CF_KV_NAMESPACE }}
         run: |
           python3 tools/kv_put.py out/daily.html daily:index
+          python3 tools/kv_put.py out/top.html daily:top        # 收录页（/?top，各家热门榜全收录）
           # 归档 key 与页面上的「this day's page」链接（/d/<date>）同一口径 = 中国日期
           python3 tools/kv_put.py out/daily.html "daily:$(TZ=Asia/Shanghai date +%F)"
           python3 tools/kv_put.py out/daily.json daily:json --content-type "application/json; charset=utf-8"
