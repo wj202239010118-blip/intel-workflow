@@ -87,6 +87,25 @@ def _fmt_time(raw):
     return parsed.strftime("%d %b %Y")
 
 
+# 这些只当「容器」用，不适合做卡片上的分类角标（各家 feed 都会混进来）
+_CAT_NOISE = {"latest news", "news", "articles", "stories"}
+
+
+def pick_category(values):
+    """挑一个能当角标的分类：跳过 Latest News 这类容器词，取第一个像样的。"""
+    for value in values or []:
+        text = (value or "").strip()
+        if text and text.lower() not in _CAT_NOISE:
+            return text[:40]
+    return ""
+
+
+def image_from_html(html_text):
+    """feed 的 description 里内嵌的 <img src>（WordPress 常这么给首图）。"""
+    m = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', html_text or "", re.I)
+    return m.group(1)[:400] if m else ""
+
+
 def _from_xml(text, limit):
     try:
         root = ET.fromstring((text or "").strip())
@@ -97,8 +116,10 @@ def _from_xml(text, limit):
         if entry.tag not in ("item", ATOM + "entry"):
             continue
         title, link, stamp, desc = "", "", "", ""
+        image, cats = "", []
         for child in entry:
             tag = child.tag
+            local = str(tag).rsplit("}", 1)[-1].lower()
             if tag in ("title", ATOM + "title"):
                 title = _clean(child.text)
             elif tag == ATOM + "link":
@@ -112,12 +133,24 @@ def _from_xml(text, limit):
                 stamp = stamp or _clean(child.text)
             elif tag in ("description", "summary", "encoded", ATOM + "summary", ATOM + "content"):
                 desc = desc or (child.text or "")
+            elif local == "category":
+                value = _clean(child.text)
+                if value:
+                    cats.append(value)
+            elif local in ("content", "thumbnail") and not image:
+                image = child.get("url") or ""
+            elif local == "enclosure" and not image:
+                href = child.get("url") or ""
+                kind = (child.get("type") or "").lower()
+                if kind.startswith("image") or href.lower().endswith((".jpg", ".jpeg", ".png", ".webp", ".gif")):
+                    image = href
         if not (title and link) or link in seen:
             continue
         seen.add(link)
         out.append({
             "rank": len(out) + 1, "title": title, "url": link,
             "time": _fmt_time(stamp), "ts": _iso_time(stamp), "summary": brief(desc),
+            "image": image or image_from_html(desc), "category": pick_category(cats),
         })
         if len(out) >= limit:
             break
@@ -143,9 +176,20 @@ def _from_regex(text, limit):
         if not (title and link) or link in seen:
             continue
         seen.add(link)
+        image = ""
+        im = (re.search(r'<media:content[^>]+url="([^"]+)"', block, re.I)
+              or re.search(r'<media:thumbnail[^>]+url="([^"]+)"', block, re.I))
+        if im:
+            image = im.group(1)
+        if not image:
+            em = re.search(r'<enclosure[^>]+url="([^"]+)"', block, re.I)
+            if em and re.search(r"\.(jpe?g|png|webp|gif)(\?|$)", em.group(1), re.I):
+                image = em.group(1)
+        cats = [_clean(c) for c in re.findall(r"<category[^>]*>(.*?)</category>", block, re.S | re.I)]
         out.append({
             "rank": len(out) + 1, "title": title, "url": link,
             "time": _fmt_time(stamp), "ts": _iso_time(stamp), "summary": brief(desc),
+            "image": image or image_from_html(desc), "category": pick_category(cats),
         })
         if len(out) >= limit:
             break

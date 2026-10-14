@@ -68,6 +68,8 @@ def _items_from(parsed, site):
                 "site": site.domain,
                 "ts": it.get("ts", ""),
                 "summary": it.get("summary", ""),
+                "image": it.get("image", ""),
+                "category": it.get("category", ""),
             },
         )
         for it in parsed
@@ -183,7 +185,8 @@ def fetch_site(site, http, profile=None, headless=False, wait=2500, timeout=45):
             title=it.get("title", ""),
             url=it.get("url", ""),
             metrics={"time": it.get("time", ""), "site": site.domain,
-                     "ts": it.get("ts", ""), "summary": it.get("summary", "")},
+                     "ts": it.get("ts", ""), "summary": it.get("summary", ""),
+                     "image": it.get("image", ""), "category": it.get("category", "")},
         )
         for i, it in enumerate(payload.get("items", []))
     ]

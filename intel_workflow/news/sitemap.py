@@ -12,7 +12,7 @@
 import re
 import xml.etree.ElementTree as ET
 
-from .feed import _clean, _fmt_time
+from .feed import _clean, _fmt_time, _iso_time
 
 SITEMAP_BLOCK = re.compile(r"<url\b.*?</url>", re.S | re.I)
 LOC_RE = re.compile(r"<loc[^>]*>(.*?)</loc>", re.S | re.I)
@@ -79,6 +79,7 @@ def _from_xml(text, limit):
             "title": title or title_from_url(loc),
             "url": loc,
             "time": _fmt_time(pub or mod),
+            "ts": _iso_time(pub or mod),
         })
         if len(out) >= limit:
             break
@@ -93,7 +94,11 @@ def _from_regex(text, limit):
         if not loc or loc in seen:
             continue
         seen.add(loc)
-        out.append({"rank": len(out) + 1, "title": title_from_url(loc), "url": loc, "time": ""})
+        pm = (re.search(r"<(?:news:)?publication_date[^>]*>(.*?)</", m.group(0), re.S | re.I)
+              or re.search(r"<lastmod[^>]*>(.*?)</", m.group(0), re.S | re.I))
+        stamp = _clean(pm.group(1)) if pm else ""
+        out.append({"rank": len(out) + 1, "title": title_from_url(loc), "url": loc,
+                    "time": _fmt_time(stamp), "ts": _iso_time(stamp)})
         if len(out) >= limit:
             break
     return out
