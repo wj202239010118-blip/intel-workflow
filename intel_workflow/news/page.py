@@ -178,12 +178,12 @@ SCRIPT = """
     var when=it.date_cn?' · '+esc(it.date_cn):'';
     return '<article id="'+(i+1)+'" class="'+(img?'':'plain')+'" data-site="'+esc(it.site_key||'')+'">'
       +img+tag+'<h3><a href="'+esc(it.url)+'" target="_blank" rel="noopener nofollow">'+esc(it.title)+'</a></h3>'
-      +'<p class="meta">'+esc(label(it))+when+'</p>'+sum+'</article>';
+      +'<p class="meta">'+when+'</p>'+sum+'</article>';
   }
   function leadHtml(it){
     var img=it.image?'<img src="'+esc(it.image)+'" alt="" referrerpolicy="no-referrer" onerror="this.style.display=&#39;none&#39;">':'';
     return '<a class="lead" href="'+esc(it.url)+'" target="_blank" rel="noopener nofollow" data-site="'+esc(it.site_key||'')+'">'
-      +img+'<span class="kicker">'+esc(it.category||label(it))+'</span><h2>'+esc(it.title)+'</h2>'
+      +img+'<span class="kicker">'+esc(it.category||"")+'</span><h2>'+esc(it.title)+'</h2>'
       +(it.summary?'<p>'+esc(it.summary)+'</p>':'')+'</a>';
   }
   function topic(it){
@@ -407,24 +407,6 @@ def _themes_card(themes, esc):
             '%s</section>' % blocks)
 
 
-def _section(key, items, esc):
-    """按来源的分区段：段头 + 左 1 张大卡 + 右侧标题列表。"""
-    if not items:
-        return ""
-    label = SITE_LABEL.get(key) or items[0].get("site") or key
-    lead = next((r for r in items if r.get("image")), items[0])
-    rest = [r for r in items if r is not lead][:8]
-    rows = "".join('<li data-site="%s"><a href="%s" target="_blank" rel="noopener nofollow">%s</a>'
-                   '<span class="d">%s</span></li>'
-                   % (esc(key), esc(r["url"]), esc(r["title"]),
-                      esc(r.get("date_cn") or r.get("time") or ""))
-                   for r in rest)
-    return ('<section class="bysec" data-site="%s">'
-            '<div class="sec-h"><em>Latest from</em><h2>%s</h2></div>'
-            '<div class="srow"><div>%s</div><div><ul class="slist">%s</ul></div></div></section>'
-            % (esc(key), esc(label), _card(lead, 0, esc), rows))
-
-
 def _card(row, idx, esc):
     """一张图文卡：图（有则显）→ 分类角标 → 标题 → 来源·中国日期 → 一句 why → 摘要。
 
@@ -441,7 +423,7 @@ def _card(row, idx, esc):
              'onerror="this.remove()">' % esc(image)) if image else ""
     tag = ('<span class="tag">%s</span>' % esc(row.get("category") or _site_label(row))
            if row.get("category") else "")
-    meta = " · ".join(esc(x) for x in (_site_label(row), row.get("date_cn") or row["time"]) if x)
+    meta = esc(row.get("date_cn") or row["time"])      # 不标来源：几家平台彻底汇总成一个流
     why = f'<p class="why">{esc(row["why"])}</p>' if row.get("why") else ""
     summary = f'<p class="sum">{esc(row["summary"])}</p>' if row["summary"] else ""
     cls = "hot" if row.get("kind") == "hot" else (row.get("sentiment") or "")
@@ -454,8 +436,11 @@ def _card(row, idx, esc):
 
 def render(pages, date=None, per_site=PER_SITE_N, site_name="iGaming Daily", analysis=None):
     """生成页面 HTML（英文）。版面按 igaming.news 首页的语言（规格见 docs/a-face-layout.md）：
-    utility bar → masthead → sector bar → 左 2/3 主列（LIVE 大头条 + 卡片网格）
-    / 右 1/3 侧栏（TOP READS + Today's themes）→ 按来源的分区段。
+    utility bar → masthead → 左 2/3 主列（LIVE 大头条 + 卡片网格）
+    / 右 1/3 侧栏（TOP READS + Today's themes）。
+
+    2026-10-14(用户): **几家平台彻底汇总成一个流** —— 不按来源分区、卡片上也不标来源
+    （原话「我只看结果」）。因此没有 sector bar，也没有 `LATEST FROM <源>` 段落。
 
     `analysis` = `analyze.analyze()` 的结果（每条 sentiment/kind/why + themes）：新版面没有 tab，
     它落在卡片左侧色条（hot/positive/negative）、卡片里那行 why、以及侧栏的 themes 卡上。
@@ -479,31 +464,24 @@ def render(pages, date=None, per_site=PER_SITE_N, site_name="iGaming Daily", ana
     themes = (analysis or {}).get("themes") or []
     sources = ", ".join(sorted({r["site"] for r in rows if r["site"]}))
 
-    # 全局按时间倒序（没 ts 的沉底）；头条优先挑一条带图的，别开天窗
-    ordered = sorted(rows, key=lambda r: r.get("ts") or "", reverse=True)
+    # 排序：先按**中国日期**（同一天的聚在一起），再按精确时间 —— igaming.news 的 sitemap
+    # 只给到日期（当天 00:00），若只用 ts 排，它会整批沉到最底下，"彻底汇总"就看不出来了。
+    ordered = sorted(rows, key=lambda r: (r.get("date_cn") or "", r.get("ts") or ""), reverse=True)
     lead = next((r for r in ordered if r.get("image")), ordered[0] if ordered else None)
     rest = [r for r in ordered if r is not lead]
 
-    # 过滤用的站名（按首次出现顺序）
-    keys = [k for k in dict.fromkeys(r.get("site_key") or "" for r in ordered) if k]
-    filters = "".join('<a data-filter="%s">%s</a>' % (esc(k), esc(SITE_LABEL.get(k, k)))
-                      for k in keys)
-
     ubar = ('<div class="ubar"><div class="wrap">'
-            '<nav class="srcs">%s</nav>'
             '<a class="arch" href="/d/%s">This day\'s page</a>'
-            '<span class="pill">%s</span></div></div>' % (filters, esc(date), esc(pretty)))
+            '<span class="pill">%s</span></div></div>' % (esc(date), esc(pretty)))
 
     mast = ('<header class="mast"><div class="wrap">'
             '<a class="wordmark" href="/?news">iGaming<span>Daily</span></a>'
             '<nav class="mainnav"><a href="#live">Latest</a><a href="#top">Top reads</a>'
-            '<a href="#bysec">By source</a><a href="#themes">Themes</a></nav>'
+            '<a href="#themes">Themes</a></nav>'
             '<a class="cta" href="#live">Live feed</a></div></header>')
 
-    sectors = ('<nav class="sectors"><div class="wrap">%s'
-               '<a class="more" href="#bysec">More \u2192</a></div></nav>' % filters)
-
-    grid = "".join(_card(r, i + 1, esc) for i, r in enumerate(rest[:24]))
+    # 彻底汇总：不按来源分区、卡上也不标来源 —— 几家平台混成一个时间流（用户 2026-10-14：只看结果）
+    grid = "".join(_card(r, i + 1, esc) for i, r in enumerate(rest))
     main_col = ('<div id="live"><span class="live-pill"><i></i>Live iGaming News</span>'
                 '%s<div class="grid">%s</div></div>'
                 % (_lead(lead, esc) if lead else "", grid))
@@ -511,14 +489,8 @@ def render(pages, date=None, per_site=PER_SITE_N, site_name="iGaming Daily", ana
     top = "".join(_topic_item(r, esc) for r in ordered[:4])
     side = ('<aside class="side">'
             '<section class="topic" id="top"><div class="topic-h"><b>Top reads</b>'
-            '<a class="more" href="#bysec">Explore more \u2192</a></div><ul>%s</ul></section>'
+            '<a class="more" href="#live">Explore more \u2192</a></div><ul>%s</ul></section>'
             '%s</aside>' % (top, _themes_card(themes, esc)))
-
-    groups = collections.OrderedDict()
-    for row in ordered:
-        groups.setdefault(row.get("site_key") or "", []).append(row)
-    bysec = ('<div id="bysec">%s</div>' % "".join(_section(k, v, esc) for k, v in groups.items())
-             if len(groups) > 1 else "")
 
     if not rows:
         main_col = ('<div id="live"><span class="live-pill"><i></i>Live iGaming News</span>'
@@ -537,10 +509,8 @@ def render(pages, date=None, per_site=PER_SITE_N, site_name="iGaming Daily", ana
 <body>
 {ubar}
 {mast}
-{sectors}
 <main class="wrap">
 <div class="cols">{main_col}{side}</div>
-{bysec}
 {PLACEHOLDER}
 </main>
 <footer><div class="wrap">

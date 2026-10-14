@@ -21,6 +21,7 @@ import fcntl
 import json
 import os
 import pathlib
+import re
 import time
 
 from ..adapters.base import Degraded
@@ -107,6 +108,57 @@ def _wait_min_interval(http):
         time.sleep(gap + 1)
 
 
+def og_from(html):
+    """文章页 HTML → 首图（og:image / twitter:image）+ 分类（articleSection / category 链接）。
+
+    与 Worker 实时腿里的 `_ogFrom` 同规则 —— 两边都靠这一对字段给 sitemap 源补图文卡。
+    """
+    text = html or ""
+    m = (re.search(r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']', text, re.I)
+         or re.search(r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:image["\']', text, re.I)
+         or re.search(r'<meta[^>]+name=["\']twitter:image["\'][^>]+content=["\']([^"\']+)["\']', text, re.I))
+    category = ""
+    jl = re.search(r'"articleSection"\s*:\s*"([^"]+)"', text, re.I)
+    if jl:
+        category = feed_parser._clean(jl.group(1))
+    if not category:
+        a = re.search(r'<a[^>]+href=["\'][^"\']*?/category/([^"\'/]+)["\']', text, re.I)
+        if a:
+            category = feed_parser._clean(a.group(1)).replace("-", " ")
+    return {"image": feed_parser._clean(m.group(1)) if m else "", "category": category[:40]}
+
+
+def fill_article_images(site, http, items, cap=15):
+    """sitemap 通道天生不给图 → 逐篇抓文章页抽 og:image / 分类。
+
+    三条约束（与 Worker 侧一致，理由是同一个）：**只补缺图的**、**最多 cap 篇**、
+    抓取走 `http` 的限流闸门（篇间自动留间隔）。这是"逐篇抓"，比"一次 GET 拿全量"重得多，
+    所以只能在这个量级上做（一天一次 × 15 篇），绝不放宽。
+
+    图是**增强项**：单篇抓失败就跳过，绝不让它拖垮整条通道。
+    """
+    todo = [it for it in items if not (it.metrics or {}).get("image")][:cap]
+    for it in todo:
+        # 闸门要求同域两次请求之间留够间隔（默认 15s），而 http.get **不会自己等**：间隔不够
+        # 直接抛 RateLimited。原先的 `except Exception: continue` 会把限流一起吞掉 → 15 篇全被
+        # 静默跳过、图一张都没补上（2026-10-14 实测踩到）。
+        _wait_min_interval(http)
+        try:
+            _status, html = http.get(it.url, domain=site.domain)
+        except RateLimited:
+            break                              # 撞到闸门别硬来：剩下的留到下一天
+        except Exception:  # noqa: BLE001
+            continue
+        got = og_from(html)
+        metrics = it.metrics or {}
+        if got["image"]:
+            metrics["image"] = got["image"]
+        if got["category"] and not metrics.get("category"):
+            metrics["category"] = got["category"]
+        it.metrics = metrics
+    return items
+
+
 def fetch_sitemap(site, http, limit=None):
     """XML sitemap → Intel；是 sitemapindex 就自动跟一层到含 "news" 的子 sitemap。"""
     url = site.sitemap
@@ -135,6 +187,7 @@ def fetch_sitemap(site, http, limit=None):
             f"{site.key}：sitemap 有响应但解析不出条目"
             "（把 [news.sitemaps] 直接指向子 sitemap，例如 .../news-sitemap.xml）"
         )
+    fill_article_images(site, http, items)     # sitemap 没图 → 逐篇补（受限流闸门保护）
     return Intel(
         platform=site.key, kind="news", method="sitemap",
         source=f"{site.domain} sitemap（HTTP，无浏览器）",

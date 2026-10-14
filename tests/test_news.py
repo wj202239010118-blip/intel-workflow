@@ -388,7 +388,10 @@ class FetchChannelTest(unittest.TestCase):
                                  profile="/nonexistent-profile")
         self.assertEqual(intel.method, "sitemap")
         self.assertEqual(len(intel.items), 2)
-        self.assertEqual(http.calls, ["https://igaming.news/news-sitemap.xml"])  # 一次 HTTP，没起浏览器
+        # 先拿 sitemap；之后通道会**逐篇抓文章页补 og:image**（sitemap 天生不给图）——
+        # 全程仍是纯 HTTP、不起浏览器（2026-10-14 加补图后断言相应放宽）。
+        self.assertEqual(http.calls[0], "https://igaming.news/news-sitemap.xml")
+        self.assertTrue(all(c.startswith("http") for c in http.calls))
         self.assertEqual(intel.items[0].title, "Wazdan Bolsters Danish Market Position")
         self.assertIn("Oct 2026", intel.items[0].metrics["time"])
         for item in intel.items:
@@ -413,7 +416,9 @@ class FetchChannelTest(unittest.TestCase):
         http.gate = types.SimpleNamespace(min_interval=0)   # 测试里不等 15 秒
         intel = news_fetch.fetch(self._site(sitemap="https://x.example/sitemap.xml"), http)
         self.assertEqual(intel.method, "sitemap")
-        self.assertEqual(calls, ["https://x.example/sitemap.xml", "https://x.example/news-sitemap.xml"])
+        # 头两次是 sitemapindex → 子 sitemap；其余是逐篇补图的文章页
+        self.assertEqual(calls[:2], ["https://x.example/sitemap.xml", "https://x.example/news-sitemap.xml"])
+        self.assertTrue(all(c.startswith("http") for c in calls))
 
 
     def test_feed_site_never_touches_browser(self):
