@@ -66,6 +66,8 @@ def _add_news_parser(sub):
     sp.add_argument("--debug", action="store_true", help="打印每个站点的抓取细节")
     sp.add_argument("--out", default=None)
     sp.add_argument("--no-save", action="store_true", help="只打印不落盘")
+    sp.add_argument("--no-images", action="store_true",
+                    help="不抓文章图（云端用：省掉逐篇 16s 闸门等待；本机跑图时不要加）")
     sp.add_argument("--config", default=None)
 
 
@@ -132,6 +134,10 @@ def _news_sites(args, cfg):
 
 
 def _news_run(args, cfg):
+    if getattr(args, "no_images", False):
+        import os as _os
+        _os.environ["INTEL_NEWS_IMAGES"] = "0"
+        print("🖼  本轮不抓图（--no-images）：只取标题/摘要/链接")
     if not args.force and not args.out and news_sched.already_ran():
         print(f"⏭  今天（{news_sched.today()}）已经成功跑过 → 跳过（要重跑加 --force）")
         return 0

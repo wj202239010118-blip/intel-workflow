@@ -132,6 +132,12 @@ def og_from(html):
     return {"image": feed_parser._clean(m.group(1)) if m else "", "category": category[:40]}
 
 
+def images_enabled():
+    """是否抓图。env `INTEL_NEWS_IMAGES=0` 关闭（云端没图也能出日报，本机跑图时再打开）。"""
+    import os
+    return os.environ.get("INTEL_NEWS_IMAGES", "1") != "0"
+
+
 def fill_article_images(site, http, items, cap=15):
     """sitemap 通道天生不给图 → 逐篇抓文章页抽 og:image / 分类。
 
@@ -141,6 +147,12 @@ def fill_article_images(site, http, items, cap=15):
 
     图是**增强项**：单篇抓失败就跳过，绝不让它拖垮整条通道。
     """
+    if not images_enabled():
+        # 云端模式：一次文章页请求都不发（16s/篇 × 15 篇 = 整轮 80% 的时间都在这）
+        for it in items:
+            it.metrics = it.metrics or {}
+            it.metrics["image_skipped"] = True
+        return
     todo = [it for it in items if not (it.metrics or {}).get("image")][:cap]
     if getattr(site, "browser_og", False):
         # 整站对 HTTP 一律 403 的站（sbcnews.co.uk）：HTTP 抓文章页只会拿到 403 的挑战页，

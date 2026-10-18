@@ -43,7 +43,9 @@ jobs:
         run: python -m unittest discover -s tests
 
       - name: 抓取 + 整合英文日报（纯 HTTP，无浏览器）
-        run: python3 intel news run --out out
+        # 2026-10-18 用户定：云端**不抓图**（逐篇 16s 闸门 = 整轮 80% 时间，实测 336s → 49s）；
+        #   图留给本地腿（本机跑 `intel news run` 不带 --no-images 即抓图）。
+        run: python3 intel news run --out out --no-images
 
       - name: 生成每日热点页（静态 HTML，可托到边缘）
         env:
