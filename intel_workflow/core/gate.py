@@ -7,7 +7,9 @@
 """
 import datetime as dt
 import json
+import os
 import pathlib
+import threading
 import time
 
 DEFAULT_STATE = pathlib.Path.home() / ".cache" / "intel-workflow" / "gate.json"
@@ -23,6 +25,9 @@ class Gate:
         self.min_interval = min_interval
         self.daily_cap = daily_cap
         self.cooldown = cooldown
+        # 2026-10-18: 站间并行抓取 —— Gate 状态是**按域名**的，但 _save 会整文件重写，
+        # 多线程同时写会把 gate.json 写坏/丢更新。所以所有读写都过这把锁，写盘用原子替换。
+        self._lock = threading.RLock()
         self._d = self._load()
 
     # --- 状态 ---
@@ -33,8 +38,11 @@ class Gate:
             return {"domains": {}}
 
     def _save(self):
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps(self._d, indent=1), encoding="utf-8")
+        with self._lock:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = self.path.with_name(self.path.name + ".tmp")
+            tmp.write_text(json.dumps(self._d, indent=1), encoding="utf-8")
+            os.replace(tmp, self.path)      # 原子替换：并发读者永远看不到半截 JSON
 
     def _entry(self, domain):
         entry = self._d["domains"].setdefault(
@@ -49,6 +57,10 @@ class Gate:
     # --- 判定 ---
     def check(self, domain):
         """返回 (是否放行, 原因)。不发任何请求。"""
+        with self._lock:
+            return self._check(domain)
+
+    def _check(self, domain):
         now = time.time()
         entry = self._entry(domain)
         if entry["cooldown_until"] > now:
@@ -62,13 +74,15 @@ class Gate:
         return True, "ok"
 
     def record(self, domain):
-        entry = self._entry(domain)
-        entry["last"] = time.time()
-        entry["count"] += 1
-        self._save()
+        with self._lock:
+            entry = self._entry(domain)
+            entry["last"] = time.time()
+            entry["count"] += 1
+            self._save()
 
     def trip(self, domain, seconds=None):
         """命中风控 → 冷却（持久化）。"""
-        entry = self._entry(domain)
-        entry["cooldown_until"] = time.time() + (seconds or self.cooldown)
-        self._save()
+        with self._lock:
+            entry = self._entry(domain)
+            entry["cooldown_until"] = time.time() + (seconds or self.cooldown)
+            self._save()

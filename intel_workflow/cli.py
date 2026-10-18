@@ -12,6 +12,8 @@ from .collab import crosscheck
 from .config import Config
 from .core.gate import Gate, RateLimited
 from .core.http import Http
+from concurrent.futures import ThreadPoolExecutor
+
 from .news import digest as news_digest
 from .news import fetch as news_fetch
 from .news import push as news_push
@@ -171,36 +173,46 @@ def _news_run(args, cfg):
             print("⏭  另一个 news 进程正在用同一浏览器 profile → 本轮跳过（别并发，下次跑会补上）")
             return 0
 
-        intels, failures = [], []
-        for site in site_list:
+        def _fetch_one(site):
+            """抓一个站（2026-10-18：改成按站并行 —— 不同域名的闸门互不影响）。"""
             channel = news_fetch.channel_of(site)
             print(f"→ {site.key} [{channel}]  {site.feed or site.sitemap or site.url}")
             try:
                 intel = news_fetch.fetch(site, http, profile=profile, headless=headless)
             except RateLimited as exc:
                 print(f"  ⛔ {exc}（闸门保护，这是预期行为，不要绕开）")
-                failures.append((site.key, "rate-gated (see local log)"))
+                return None, (site.key, "rate-gated (see local log)")
             except Degraded as exc:
                 print(f"  ⚠️  {type(exc).__name__}: {exc}")
-                failures.append((site.key, "not fetched — render/extract failed (see local log)"))
+                return None, (site.key, "not fetched — render/extract failed (see local log)")
             except Exception as exc:  # noqa: BLE001
                 print(f"  ❌ {type(exc).__name__}: {exc}")
-                failures.append((site.key, f"error: {type(exc).__name__}"))
-            else:
-                print(f"  ✅ {len(intel.items)} 条（{intel.method}）")
-                # 命中各家热门榜的记下名次（0 = 不在榜上）。榜单抓不到时 ranks 为空 → 全 0
-                for item in intel.items:
-                    metrics = item.metrics or {}
-                    metrics["hot_rank"] = news_ranking.rank_of(item.url, ranks)
-                    item.metrics = metrics
-                on_board = sum(1 for i in intel.items if (i.metrics or {}).get("hot_rank"))
-                if on_board:
-                    print(f"     🔥 其中 {on_board} 条在自家热门榜上")
-                intels.append(intel)
-                if not args.no_save:
-                    md_path, _ = intel.save(outdir)
-                    if args.debug:
-                        print(f"  💾 {md_path}")
+                return None, (site.key, f"error: {type(exc).__name__}")
+            print(f"  ✅ {len(intel.items)} 条（{intel.method}）")
+            # 命中各家热门榜的记下名次（0 = 不在榜上）。榜单抓不到时 ranks 为空 → 全 0
+            for item in intel.items:
+                metrics = item.metrics or {}
+                metrics["hot_rank"] = news_ranking.rank_of(item.url, ranks)
+                item.metrics = metrics
+            on_board = sum(1 for i in intel.items if (i.metrics or {}).get("hot_rank"))
+            if on_board:
+                print(f"     🔥 其中 {on_board} 条在自家热门榜上")
+            if not args.no_save:
+                md_path, _ = intel.save(outdir)
+                if args.debug:
+                    print(f"  💾 {md_path}")
+            return intel, None
+
+        # 站间并行：4 个域名各自的闸门（min_interval / 每日上限 / 冷却）互不相干，
+        # 站内仍是串行 + 等间隔（fetch() 内部 _wait_min_interval）。原来串行跑 ≈ 4×单站时长。
+        intels, failures = [], []
+        _workers = max(1, min(4, len(site_list)))
+        with ThreadPoolExecutor(max_workers=_workers) as _ex:
+            for intel, fail in _ex.map(_fetch_one, site_list):
+                if intel is not None:
+                    intels.append(intel)
+                if fail is not None:
+                    failures.append(fail)
 
     if not intels:
         news_sched.mark_run(success=False, note="所有站点都没抓到")
