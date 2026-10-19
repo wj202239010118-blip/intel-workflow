@@ -83,8 +83,16 @@ color:var(--muted);text-decoration:none;white-space:nowrap;cursor:pointer}
 
 /* ④ main：左 2/3 主列 + 右 1/3 侧栏 */
 main{padding:24px 20px 60px}
-.cols{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:26px}
-.main-col{min-width:0}                       /* 左列外层：保证 .cols 只有两个子元素 */
+/* 2026-10-19(用户)：整页固定在视口内，**左列自己上下滑** ——
+   新闻再长也不会把侧栏 Today's themes 下面拖出一长串（那样很丑）。
+   移动端(<820px)退回普通整页滚动。 */
+.cols{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:26px;
+height:calc(100vh - 180px);min-height:520px;align-items:start}
+.main-col{min-width:0;height:100%;overflow-y:auto;overscroll-behavior:contain;
+padding-right:10px;scrollbar-width:thin;scrollbar-color:#cfd6de transparent}
+.main-col::-webkit-scrollbar{width:8px}
+.main-col::-webkit-scrollbar-thumb{background:#cfd6de;border-radius:8px}
+.main-col::-webkit-scrollbar-track{background:transparent}
 .live-pill{display:inline-flex;align-items:center;gap:7px;background:var(--or-soft);color:var(--or);
 border-radius:999px;padding:6px 13px;font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase}
 .live-pill i{width:7px;height:7px;border-radius:50%;background:var(--or);display:inline-block;
@@ -96,7 +104,7 @@ animation:blip 2s ease-in-out infinite}
 text-transform:uppercase;color:var(--or)}
 .lead h2{margin:0;font-size:32px;line-height:1.15;font-weight:800;letter-spacing:-.6px}
 .lead p{margin:10px 0 0;font-size:15px;color:var(--muted)}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:20px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
 /* 2026-10-19(用户选 igaming.news 风): 去卡片容器 —— 无边框/无圆角，只用底部细线分条 */
 article{background:transparent;border:0;border-bottom:1px solid var(--line);
 border-radius:0;padding:0 0 18px;overflow:visible}
@@ -159,7 +167,7 @@ footer .wrap{border-top:1px solid var(--line);padding-top:14px}
    ③ 头条文字叠到图上省首屏 ④ 无图做成一种样式 ⑤ 色条改小胶囊）。 */
 
 /* ① 右列贴着滚动：左列再长，右下也不会留大片空白（零新增内容） */
-.side{position:sticky;top:84px}
+.side{height:100%;overflow-y:auto;scrollbar-width:thin;position:static}
 
 /* ② 层级：头条 → 3 张精选（图+why+摘要都留）→ 长尾紧凑列表（只留 why） */
 .featured-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;margin:26px 0 30px}
@@ -207,7 +215,9 @@ font-size:10px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;vert
 .chip-negative{color:var(--neg);background:#fdecef}
 .chip-row{margin:0 0 8px;display:flex;align-items:center;gap:8px}
 
-@media (max-width:820px){.featured-row{grid-template-columns:1fr}.hero-title{font-size:22px}
+@media (max-width:820px){.cols{display:block;height:auto;min-height:0}
+.main-col,.side{height:auto;overflow:visible;padding-right:0}
+.featured-row{grid-template-columns:1fr}.hero-title{font-size:22px}
 .hero-text{padding:0 16px 14px}}
 @media (max-width:560px){.feed-row{grid-template-columns:72px minmax(0,1fr)}
 .feed-row img,.feed-row .noimg{width:72px;height:48px}}
