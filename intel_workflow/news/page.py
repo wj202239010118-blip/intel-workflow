@@ -291,7 +291,13 @@ SCRIPT = """
   /* 实时区：拉 /live.json（Worker 每 5 分钟抓一轮），把 LIVE 大头条 + 卡片流 + TOP READS
      换成最新条目。拉不到 / 没数据 / 还在加载就保持服务端渲染的内容 —— 绝不留空白。 */
   var LABEL=window.__SITE_LABEL||{}, last='';
-  function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){
+  function esc(s){
+    /* 2026-10-19: 源站 RSS 里带数字实体（M&#038;A / Dafabet&#8217;s），前端重建时原样显示成字面量。
+       先把数字实体还原成字符，再统一转义 —— 顺序不能反（先还原再转义才不会二次编码）。 */
+    var t=String(s==null?'':s).replace(/&#(\d+);/g,function(_,n){
+      try{return String.fromCodePoint(parseInt(n,10));}catch(e){return _;}
+    });
+    return t.replace(/[&<>"']/g,function(c){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
   function label(it){return LABEL[it.site_key]||it.site||'';}
   function chip(it){
