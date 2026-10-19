@@ -116,7 +116,7 @@ article h3 a:hover{color:var(--link)}
 
 /* 侧栏 */
 .side{display:flex;flex-direction:column;gap:16px}
-/* 2026-10-19: 侧栏长标题 3 行截断（实测 Austria&#8217;s… 那种会撑爆卡片） */
+/* 2026-10-19: 侧栏长标题 3 行截断（实测 Austria's… 那种会撑爆卡片） */
 .topic .withimg .t{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .topic{background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:16px}
 .topic-h{display:flex;align-items:center;gap:10px;margin:0 0 10px}
