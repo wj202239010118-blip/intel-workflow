@@ -116,6 +116,8 @@ article h3 a:hover{color:var(--link)}
 
 /* 侧栏 */
 .side{display:flex;flex-direction:column;gap:16px}
+/* 2026-10-19: 侧栏长标题 3 行截断（实测 Austria&#8217;s… 那种会撑爆卡片） */
+.topic .withimg .t{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .topic{background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:16px}
 .topic-h{display:flex;align-items:center;gap:10px;margin:0 0 10px}
 .topic-h b{font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
@@ -184,7 +186,8 @@ overflow:hidden;background:var(--hair)}
 background:linear-gradient(to top,rgba(0,0,0,.8) 0%,rgba(0,0,0,.18) 55%,rgba(0,0,0,0) 100%)}
 .hero-text{position:relative;padding:0 24px 20px}
 .hero-cat{font-size:12px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#ffb877}
-.hero-title{display:block;margin:6px 0 0;font-size:30px;line-height:1.15;font-weight:800;letter-spacing:-.5px;color:#fff}
+.hero-title{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;
+margin:6px 0 0;font-size:30px;line-height:1.15;font-weight:800;letter-spacing:-.5px;color:#fff}
 .hero-sum{margin:8px 0 0;font-size:14px;color:rgba(255,255,255,.84);display:-webkit-box;
 -webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .hero-why{margin:12px 0 0;font-size:15px;color:var(--link)}
@@ -477,9 +480,14 @@ SCRIPT = """
 
 
 def _plain(value):
-    """多轮解实体：有些源双重编码（`&amp;#39;`），只解一次会把字面量留给读者。"""
+    """多轮解实体：有些源双重/三重编码（`&amp;#39;`、`&amp;amp;#8217;`）。
+
+    2026-10-19 实测：Top reads 里出现 `Austria&#8217;s` 字面量 —— 只解 3 轮不够，
+    且解完再 `html.escape` 会把它变成 `&amp;#8217;`（浏览器显示成 `&#8217;`）。
+    这里解到稳定为止（上限 6 轮），后面的 escape 才是唯一一次编码。
+    """
     text = str(value or "")
-    for _ in range(3):
+    for _ in range(6):
         unescaped = html_mod.unescape(text)
         if unescaped == text:
             break
