@@ -170,7 +170,8 @@ footer .wrap{border-top:1px solid var(--line);padding-top:14px}
    ③ 头条文字叠到图上省首屏 ④ 无图做成一种样式 ⑤ 色条改小胶囊）。 */
 
 /* ① 右列贴着滚动：左列再长，右下也不会留大片空白（零新增内容） */
-.side{height:100%;overflow-y:auto;scrollbar-width:thin;position:static}
+/* 2026-10-19(用户)：右侧 Top reads / Today's themes **不要滚动条** —— 内容自然高度，超出就随页面走 */
+.side{height:auto;max-height:100%;overflow:visible;position:static}
 
 /* ② 层级：头条 → 3 张精选（图+why+摘要都留）→ 长尾紧凑列表（只留 why） */
 .featured-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;margin:26px 0 30px}
