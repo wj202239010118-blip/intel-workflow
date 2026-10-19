@@ -250,14 +250,21 @@ font-size:10.5px;font-weight:800;letter-spacing:.2px;vertical-align:middle;color
 
 /* ⑨ 分类索引（用户 2026-10-14）：头条下方一排分类按钮，点了跳到对应分类块。
    原生锚点，不依赖 JS；`scroll-margin-top` 让跳过去时不被吸顶的 masthead 盖住。 */
-.catnav{display:flex;flex-wrap:wrap;gap:6px 14px;margin:12px 0 14px}
-/* 2026-10-19(igaming.news 风): 胶囊 → 文字导航（大写小字 + 下划线） */
-.catnav a{display:inline-flex;align-items:center;gap:5px;padding:3px 0;border:0;border-bottom:2px solid transparent;
-border-radius:0;background:transparent;font-size:11.5px;font-weight:700;letter-spacing:.05em;
-text-transform:uppercase;color:var(--muted);text-decoration:none;white-space:nowrap;
-transition:color .15s ease,border-color .15s ease}
-.catnav a:hover{border-bottom-color:var(--or);color:var(--fg)}
-.catnav a .n{font-size:11.5px;font-weight:600;color:var(--dim)}
+/* 2026-10-19(用户)：分类导航美化 —— 单行横滑 + 竖线分隔 + 数量小胶囊（不换行，省一行高度） */
+.catnav{display:flex;flex-wrap:nowrap;gap:0;margin:10px 0 12px;padding:8px 0;
+border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.catnav::-webkit-scrollbar{display:none}
+.catnav a{display:inline-flex;align-items:center;gap:6px;padding:2px 13px;border:0;
+border-right:1px solid var(--line);border-radius:0;background:transparent;
+font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+color:var(--muted);text-decoration:none;white-space:nowrap;transition:color .15s ease}
+.catnav a:first-child{padding-left:0}
+.catnav a:last-child{border-right:0}
+.catnav a:hover{color:var(--fg)}
+.catnav a .n{font-size:10px;font-weight:700;color:var(--dim);background:#f1f3f6;
+border-radius:20px;padding:1px 7px;margin:0;line-height:1.5;transition:background .15s ease,color .15s ease}
+.catnav a:hover .n{background:var(--or);color:#fff}
 .catnav a:hover .n{color:var(--or)}
 .cat-block{scroll-margin-top:84px}
 
