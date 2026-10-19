@@ -294,7 +294,7 @@ SCRIPT = """
   function esc(s){
     /* 2026-10-19: 源站 RSS 里带数字实体（M&#038;A / Dafabet&#8217;s），前端重建时原样显示成字面量。
        先把数字实体还原成字符，再统一转义 —— 顺序不能反（先还原再转义才不会二次编码）。 */
-    var t=String(s==null?'':s).replace(/&#(\d+);/g,function(_,n){
+    var t=String(s==null?'':s).replace(/&#(\\d+);/g,function(_,n){
       try{return String.fromCodePoint(parseInt(n,10));}catch(e){return _;}
     });
     return t.replace(/[&<>"']/g,function(c){
