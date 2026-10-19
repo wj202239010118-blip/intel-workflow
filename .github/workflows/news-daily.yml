@@ -22,6 +22,11 @@ name: news-daily
 
 on:
   workflow_dispatch:            # 手动触发（首次验证 / 补跑 / Worker 定时调用）
+    inputs:
+      mark_only:                # 2026-10-19: 只写「今天已发」标记、不发 Lark（防重复骚扰时用）
+        description: "只写已发标记，不发送任何 Lark 消息"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -80,11 +85,32 @@ jobs:
       # 卡片是中文（内部群口吻，与云腿日报一致）→ 必须显式 --allow-cjk；
       # 对外的 push_top.py 仍是纯英文、走 push.assert_no_cjk，两者不混。
       # 没配 LARK_WEBHOOK 时脚本自己只打印，不会半路静默发送。
-      - name: 发行业快讯到 Lark 内部通知群（各源前 2 条 + 资讯页入口）
+      # 2026-10-19(用户：机器人反复发同一条，构成骚扰)：**同一天只发一次**。
+      #   幂等键 = KV `news:brief:<中国日期>`。存在 → 跳过；发送成功才写标记。
+      - name: 发行业快讯到 Lark 内部通知群（同一天只发一次）
         env:
           LARK_WEBHOOK: ${{ secrets.LARK_WEBHOOK }}
           LARK_SECRET: ${{ secrets.LARK_SECRET }}
-        run: python3 tools/news_brief.py --allow-cjk --send
+          CF_API_TOKEN: ${{ secrets.CF_KV_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_KV_NAMESPACE: ${{ secrets.CF_KV_NAMESPACE }}
+          MARK_ONLY: ${{ inputs.mark_only }}
+        run: |
+          KEY="news:brief:$(TZ=Asia/Shanghai date +%F)"
+          SENT="$(python3 tools/kv_get.py "$KEY" 2>/dev/null || true)"
+          if [ "${MARK_ONLY:-false}" = "true" ]; then
+            printf '%s' "$(TZ=Asia/Shanghai date '+%F %H:%M') (mark-only)" > /tmp/lark-sent
+            python3 tools/kv_put.py /tmp/lark-sent "$KEY" --content-type "text/plain"
+            echo "✍️ 只写标记，未发送（$KEY）"
+            exit 0
+          fi
+          if [ -n "$SENT" ]; then
+            echo "⏭ 今天已经发过快讯（$KEY = $SENT）→ 跳过（防重复骚扰）"
+            exit 0
+          fi
+          python3 tools/news_brief.py --allow-cjk --send
+          printf '%s' "$(TZ=Asia/Shanghai date '+%F %H:%M')" > /tmp/lark-sent
+          python3 tools/kv_put.py /tmp/lark-sent "$KEY" --content-type "text/plain"
 
       - name: 归档日报（artifact，保留 90 天）
         uses: actions/upload-artifact@v4
