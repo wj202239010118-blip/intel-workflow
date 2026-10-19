@@ -96,10 +96,6 @@ padding-right:10px;scrollbar-width:thin;scrollbar-color:#cfd6de transparent}
 #cats::-webkit-scrollbar{width:8px}
 #cats::-webkit-scrollbar-thumb{background:#cfd6de;border-radius:8px}
 #cats::-webkit-scrollbar-track{background:transparent}
-.live-pill{display:inline-flex;align-items:center;gap:7px;background:var(--or-soft);color:var(--or);
-border-radius:999px;padding:6px 13px;font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase}
-.live-pill i{width:7px;height:7px;border-radius:50%;background:var(--or);display:inline-block;
-animation:blip 2s ease-in-out infinite}
 @keyframes blip{0%,100%{opacity:1}50%{opacity:.2}}
 .lead{display:block;margin:14px 0 26px;text-decoration:none;color:inherit}
 .lead img{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:10px;display:block;background:var(--hair)}
@@ -192,7 +188,7 @@ text-transform:uppercase;color:var(--or);background:#f6f7f9}
 
 /* ③ 头条：文字叠在图内（省掉「图高 + 文字高」的叠加），比例放宽到 2:1 */
 .hero{display:block;margin:14px 0 0;text-decoration:none;color:inherit}
-.hero-media{position:relative;display:flex;align-items:flex-end;aspect-ratio:13/5;border-radius:10px;
+.hero-media{position:relative;display:flex;align-items:flex-end;aspect-ratio:2/1;border-radius:10px;
 overflow:hidden;background:var(--hair)}
 .hero-media img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 35%}
 .hero-scrim{position:absolute;inset:0;
@@ -474,7 +470,7 @@ SCRIPT = """
     /* 类别之间按条数多少排（内容多的类别说明当下更热），与 SSR 一致 */
     order.sort(function(a,b){ return groups[b].length-groups[a].length || a.localeCompare(b); });
     var cats=order.map(function(g){ return catSection(g,groups[g]); }).join('');
-    box.innerHTML='<span class="live-pill"><i></i>Live iGaming News</span>'+car+catNav(order,groups);
+    box.innerHTML=car+catNav(order,groups);
     var catsBox=document.getElementById('cats');
     if(catsBox) catsBox.innerHTML=cats;
     var top=document.querySelector('#top ul');
@@ -913,7 +909,7 @@ def render(pages, date=None, per_site=PER_SITE_N, site_name="iGaming Daily", ana
     # 顺序（2026-10-19 用户）：**轮播头条在最上** → 分类索引 → 按类别的最新新闻流。
     # 主页只做新闻（榜单挪去 /?top）；`#live` 与 `#cats` 是实时刷新会重建的两块。
     main_col = ('<div class="main-col">'
-                '<div id="live"><span class="live-pill"><i></i>Live iGaming News</span>'
+                '<div id="live">'
                 '%s%s</div>'
                 '<div id="cats" class="cats">%s</div></div>'
                 % (carousel, catnav, cats_html))
@@ -925,7 +921,7 @@ def render(pages, date=None, per_site=PER_SITE_N, site_name="iGaming Daily", ana
             '%s</aside>' % (top, _themes_card(themes, esc)))
 
     if not rows:
-        main_col = ('<div id="live"><span class="live-pill"><i></i>Live iGaming News</span>'
+        main_col = ('<div id="live">'
                     '<p class="sec">No headlines for this date.</p></div>')
 
     return f"""<!doctype html>
