@@ -244,7 +244,6 @@ cursor:pointer;transition:width .2s ease,background .2s ease}
 .cat-lead{display:block;margin:0 0 10px;max-width:420px}
 
 /* ⑧ 官方热度榜块：条目带 №N 名次徽标；块本身顶格（它排在最前） */
-#ranked{padding-top:0;border-top:0}
 .rank{display:inline-block;min-width:26px;margin-right:6px;padding:1px 6px;border-radius:6px;
 font-size:10.5px;font-weight:800;letter-spacing:.2px;vertical-align:middle;color:#fff;background:var(--or)}
 
@@ -471,7 +470,6 @@ SCRIPT = """
     order.sort(function(a,b){ return groups[b].length-groups[a].length || a.localeCompare(b); });
     var cats=order.map(function(g){ return catSection(g,groups[g]); }).join('');
     box.innerHTML='<span class="live-pill"><i></i>Live iGaming News</span>'+car+catNav(order,groups);
-    /* 类别块是另一个容器：中间夹着 Top ranked（前端不碰它，榜单一天才变一次） */
     var catsBox=document.getElementById('cats');
     if(catsBox) catsBox.innerHTML=cats;
     var top=document.querySelector('#top ul');
@@ -804,22 +802,6 @@ def _cat_section(name, items, esc):
             % (_slug(name), esc(name), head, rows))
 
 
-def _ranked_section(rows, esc):
-    """各家官网热门榜上的条目 → 单独一块（带 `№N`），放在最前。
-
-    用户 2026-10-14：按这些官方网站给新闻做排行。名次**直接来自各家自己的榜单**
-    （igaming.news 的 Most read stories / yogonet 的 TOP STORIES），不是我们猜的。
-    这块放在 `#live` 之外：实时刷新只重建 `#live`，不会把它冲掉（榜单一天才变一次）。
-    """
-    if not rows:
-        return ""
-    items = "".join(_feed_row(r, esc, badge="\u2116%d" % r["hot_rank"]) for r in rows)
-    head = ('<div class="sec-h"><em>%d from publishers\' boards</em><h2>Top ranked</h2></div>'
-            % len(rows))
-    return ('<section class="cat-block ranked" id="ranked" data-cat="Top ranked">%s'
-            '<ul class="feed-list">%s</ul></section>' % (head, items))
-
-
 def _card(row, idx, esc):
     """精选卡（头条下面那 3 张）：图或无图占位 → 分类 + sentiment 胶囊 → 标题 → 日期 → why → 摘要。"""
     title = esc(row["title"])
@@ -904,10 +886,9 @@ def render(pages, date=None, per_site=PER_SITE_N, site_name="iGaming Daily", ana
 
     # 按类别成块（聚合平台的核心：同一类消息聚在一起）。类别内保持时间倒序，
     # 类别之间按条数多少排 —— 内容多的类别（说明当下更热）自然靠前。
-    # 各家官网热门榜上的条目 → 单独一块放最前（按名次），并从类别块里剔除，避免同一类里重复出现。
-    ranked = sorted([r for r in rest_all if r.get("hot_rank")], key=lambda r: r["hot_rank"])
-    ranked_urls = {r["url"] for r in ranked}
-    rest_cats = [r for r in rest_all if r["url"] not in ranked_urls]
+    # 2026-10-19(用户)：主页**只做最新新闻** —— 移除「Top ranked」榜单块（榜单在 /?top），
+    # 所以这里不再按 hot_rank 抽走条目，全部新闻都留在类别流里。
+    rest_cats = rest_all
 
     by_cat = collections.OrderedDict()
     for row in rest_cats:
@@ -924,15 +905,13 @@ def render(pages, date=None, per_site=PER_SITE_N, site_name="iGaming Daily", ana
                             % (_slug(name), esc(name), len(items))
                             for name, items in ordered_cats))
 
-    # 顺序（用户 2026-10-14）：**轮播头条在最上** → 分类索引 → Top ranked → 类别块。
-    # `#live`（轮播+索引）与 `#cats`（类别块）是实时刷新会重建的两块；`#ranked` 夹在中间、
-    # 不归前端管（榜单一天才变一次）→ 刷新不会把它冲掉，也不会顶到头条上面去。
+    # 顺序（2026-10-19 用户）：**轮播头条在最上** → 分类索引 → 按类别的最新新闻流。
+    # 主页只做新闻（榜单挪去 /?top）；`#live` 与 `#cats` 是实时刷新会重建的两块。
     main_col = ('<div class="main-col">'
                 '<div id="live"><span class="live-pill"><i></i>Live iGaming News</span>'
                 '%s%s</div>'
-                '%s'
                 '<div id="cats" class="cats">%s</div></div>'
-                % (carousel, catnav, _ranked_section(ranked, esc), cats_html))
+                % (carousel, catnav, cats_html))
 
     top = "".join(_topic_item(r, esc) for r in ordered[:4])
     side = ('<aside class="side">'
