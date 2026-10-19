@@ -88,11 +88,14 @@ main{padding:24px 20px 60px}
    移动端(<820px)退回普通整页滚动。 */
 .cols{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:26px;
 height:calc(100vh - 180px);min-height:520px;align-items:start}
-.main-col{min-width:0;height:100%;overflow-y:auto;overscroll-behavior:contain;
+/* 2026-10-19(用户)：头条 + 分类导航**固定**不滚；滚动条只在分类导航下方（#cats）开始 */
+.main-col{min-width:0;height:100%;overflow:hidden;display:flex;flex-direction:column}
+#live{flex:0 0 auto}
+#cats{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;
 padding-right:10px;scrollbar-width:thin;scrollbar-color:#cfd6de transparent}
-.main-col::-webkit-scrollbar{width:8px}
-.main-col::-webkit-scrollbar-thumb{background:#cfd6de;border-radius:8px}
-.main-col::-webkit-scrollbar-track{background:transparent}
+#cats::-webkit-scrollbar{width:8px}
+#cats::-webkit-scrollbar-thumb{background:#cfd6de;border-radius:8px}
+#cats::-webkit-scrollbar-track{background:transparent}
 .live-pill{display:inline-flex;align-items:center;gap:7px;background:var(--or-soft);color:var(--or);
 border-radius:999px;padding:6px 13px;font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase}
 .live-pill i{width:7px;height:7px;border-radius:50%;background:var(--or);display:inline-block;
@@ -217,6 +220,7 @@ font-size:10px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;vert
 
 @media (max-width:820px){.cols{display:block;height:auto;min-height:0}
 .main-col,.side{height:auto;overflow:visible;padding-right:0}
+#cats{overflow:visible;padding-right:0}
 .featured-row{grid-template-columns:1fr}.hero-title{font-size:22px}
 .hero-text{padding:0 16px 14px}}
 @media (max-width:560px){.feed-row{grid-template-columns:72px minmax(0,1fr)}
