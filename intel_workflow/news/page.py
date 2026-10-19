@@ -97,13 +97,14 @@ text-transform:uppercase;color:var(--or)}
 .lead h2{margin:0;font-size:32px;line-height:1.15;font-weight:800;letter-spacing:-.6px}
 .lead p{margin:10px 0 0;font-size:15px;color:var(--muted)}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:20px}
-article{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--line);
-border-radius:10px;padding:0 16px 15px;overflow:hidden}
-article.plain{padding-top:14px}
+/* 2026-10-19(用户选 igaming.news 风): 去卡片容器 —— 无边框/无圆角，只用底部细线分条 */
+article{background:transparent;border:0;border-bottom:1px solid var(--line);
+border-radius:0;padding:0 0 18px;overflow:visible}
+article.plain{padding-top:0}
 article.hot{border-left-color:var(--or)}
 article.positive{border-left-color:var(--pos)}
 article.negative{border-left-color:var(--neg)}
-article .thumb{display:block;margin:0 -16px 12px;width:calc(100% + 32px);aspect-ratio:16/9;
+article .thumb{display:block;margin:0 0 12px;width:100%;aspect-ratio:16/9;border-radius:8px;
 object-fit:cover;background:var(--hair)}
 article h3{margin:0;font-size:17px;line-height:1.35;font-weight:700;letter-spacing:-.2px}
 article h3 a{color:var(--fg);text-decoration:none}
@@ -125,7 +126,7 @@ article h3 a:hover{color:var(--link)}
 .topic ul{list-style:none;margin:0;padding:0}
 .topic li{padding:11px 0;border-top:1px solid var(--hair);display:flex;gap:11px;align-items:flex-start}
 .topic li:first-child{border-top:0;padding-top:2px}
-.topic img{width:56px;height:42px;border-radius:6px;object-fit:cover;flex:none;background:var(--hair)}
+.topic img{width:72px;height:54px;border-radius:6px;object-fit:cover;flex:none;background:var(--hair)}
 .topic .t{font-size:15px;line-height:1.3;font-weight:700;color:var(--fg);text-decoration:none;display:block}
 .topic .t:hover{color:var(--link)}
 .topic .d{display:block;margin-top:3px;font-size:12px;color:var(--dim)}
@@ -170,7 +171,7 @@ padding:14px 0;border-bottom:1px solid var(--hair)}
 .feed-row img{width:96px;height:64px;border-radius:8px;object-fit:cover;object-position:50% 35%;background:var(--bar)}
 .feed-row .noimg{width:96px;height:64px;border-radius:8px;display:flex;align-items:center;justify-content:center;
 padding:4px;overflow:hidden;text-align:center;font-size:9.5px;font-weight:800;letter-spacing:.5px;
-text-transform:uppercase;color:var(--or);background:linear-gradient(135deg,#fdece0,#f4f5f6)}
+text-transform:uppercase;color:var(--or);background:#f6f7f9}
 .feed-row h4{margin:3px 0;font-size:15px;font-weight:700;line-height:1.3}
 .feed-row h4 a{color:var(--fg);text-decoration:none}
 .feed-row h4 a:hover{color:var(--link)}
@@ -179,7 +180,7 @@ text-transform:uppercase;color:var(--or);background:linear-gradient(135deg,#fdec
 
 /* ③ 头条：文字叠在图内（省掉「图高 + 文字高」的叠加），比例放宽到 2:1 */
 .hero{display:block;margin:14px 0 0;text-decoration:none;color:inherit}
-.hero-media{position:relative;display:flex;align-items:flex-end;aspect-ratio:2/1;border-radius:14px;
+.hero-media{position:relative;display:flex;align-items:flex-end;aspect-ratio:21/9;border-radius:10px;
 overflow:hidden;background:var(--hair)}
 .hero-media img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 35%}
 .hero-scrim{position:absolute;inset:0;
@@ -187,7 +188,7 @@ background:linear-gradient(to top,rgba(0,0,0,.8) 0%,rgba(0,0,0,.18) 55%,rgba(0,0
 .hero-text{position:relative;padding:0 24px 20px}
 .hero-cat{font-size:12px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#ffb877}
 .hero-title{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;
-margin:6px 0 0;font-size:30px;line-height:1.15;font-weight:800;letter-spacing:-.5px;color:#fff}
+margin:6px 0 0;font-size:24px;line-height:1.2;font-weight:800;letter-spacing:-.2px;color:#fff}
 .hero-sum{margin:8px 0 0;font-size:14px;color:rgba(255,255,255,.84);display:-webkit-box;
 -webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .hero-why{margin:12px 0 0;font-size:15px;color:var(--link)}
@@ -240,10 +241,12 @@ font-size:10.5px;font-weight:800;letter-spacing:.2px;vertical-align:middle;color
 /* ⑨ 分类索引（用户 2026-10-14）：头条下方一排分类按钮，点了跳到对应分类块。
    原生锚点，不依赖 JS；`scroll-margin-top` 让跳过去时不被吸顶的 masthead 盖住。 */
 .catnav{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 18px}
-.catnav a{display:inline-flex;align-items:center;gap:6px;padding:7px 13px;border:1px solid var(--line);
-border-radius:999px;background:#fff;font-size:12.5px;font-weight:700;color:var(--fg);text-decoration:none;
-white-space:nowrap;transition:background .15s ease,border-color .15s ease,color .15s ease}
-.catnav a:hover{border-color:var(--or);color:var(--or)}
+/* 2026-10-19(igaming.news 风): 胶囊 → 文字导航（大写小字 + 下划线） */
+.catnav a{display:inline-flex;align-items:center;gap:5px;padding:3px 0;border:0;border-bottom:2px solid transparent;
+border-radius:0;background:transparent;font-size:12px;font-weight:700;letter-spacing:.06em;
+text-transform:uppercase;color:var(--muted);text-decoration:none;white-space:nowrap;
+transition:color .15s ease,border-color .15s ease}
+.catnav a:hover{border-bottom-color:var(--or);color:var(--fg)}
 .catnav a .n{font-size:11.5px;font-weight:600;color:var(--dim)}
 .catnav a:hover .n{color:var(--or)}
 .cat-block{scroll-margin-top:84px}
