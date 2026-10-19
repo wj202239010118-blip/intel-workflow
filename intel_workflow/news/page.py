@@ -110,7 +110,7 @@ text-transform:uppercase;color:var(--or)}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
 /* 2026-10-19(用户选 igaming.news 风): 去卡片容器 —— 无边框/无圆角，只用底部细线分条 */
 article{background:transparent;border:0;border-bottom:1px solid var(--line);
-border-radius:0;padding:0 0 18px;overflow:visible}
+border-radius:0;padding:0 0 14px;overflow:visible}
 article.plain{padding-top:0}
 article.hot{border-left-color:var(--or)}
 article.positive{border-left-color:var(--pos)}
@@ -191,7 +191,7 @@ text-transform:uppercase;color:var(--or);background:#f6f7f9}
 
 /* ③ 头条：文字叠在图内（省掉「图高 + 文字高」的叠加），比例放宽到 2:1 */
 .hero{display:block;margin:14px 0 0;text-decoration:none;color:inherit}
-.hero-media{position:relative;display:flex;align-items:flex-end;aspect-ratio:21/9;border-radius:10px;
+.hero-media{position:relative;display:flex;align-items:flex-end;aspect-ratio:13/5;border-radius:10px;
 overflow:hidden;background:var(--hair)}
 .hero-media img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 35%}
 .hero-scrim{position:absolute;inset:0;
@@ -253,10 +253,10 @@ font-size:10.5px;font-weight:800;letter-spacing:.2px;vertical-align:middle;color
 
 /* ⑨ 分类索引（用户 2026-10-14）：头条下方一排分类按钮，点了跳到对应分类块。
    原生锚点，不依赖 JS；`scroll-margin-top` 让跳过去时不被吸顶的 masthead 盖住。 */
-.catnav{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 18px}
+.catnav{display:flex;flex-wrap:wrap;gap:6px 14px;margin:12px 0 14px}
 /* 2026-10-19(igaming.news 风): 胶囊 → 文字导航（大写小字 + 下划线） */
 .catnav a{display:inline-flex;align-items:center;gap:5px;padding:3px 0;border:0;border-bottom:2px solid transparent;
-border-radius:0;background:transparent;font-size:12px;font-weight:700;letter-spacing:.06em;
+border-radius:0;background:transparent;font-size:11.5px;font-weight:700;letter-spacing:.05em;
 text-transform:uppercase;color:var(--muted);text-decoration:none;white-space:nowrap;
 transition:color .15s ease,border-color .15s ease}
 .catnav a:hover{border-bottom-color:var(--or);color:var(--fg)}
